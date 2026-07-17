@@ -252,9 +252,10 @@
       <div class="panel-head"><h2>Ajuste puntual de una OR</h2></div>
       <div class="panel-sub">Para corregir un dato suelto sin tener que volver al Excel — buscá la OR por número y editá lo que haga falta.</div>
       <label>Buscar OR existente por número</label>
-      <div class="search-row">
-        <input type="text" id="buscarOrden" placeholder="Ej: 01528">
+      <div class="search-row" style="position:relative;">
+        <input type="text" id="buscarOrden" placeholder="Ej: 01528" autocomplete="off">
         <button class="btn secondary" id="btnBuscar">Buscar</button>
+        <div id="buscarResultados" style="display:none; position:absolute; top:100%; left:0; right:110px; background:var(--panel-2); border:1px solid var(--line); border-top:none; border-radius:0 0 6px 6px; max-height:260px; overflow-y:auto; z-index:20;"></div>
       </div>
       <div class="hint" id="buscarHint"></div>
 
@@ -730,6 +731,7 @@ document.getElementById('btnProcesar').addEventListener('click', async () => {
 // ============== AJUSTE PUNTUAL (formulario individual) ==============
 const $ = (id) => document.getElementById(id);
 const statusEl = $('status');
+const resultadosEl = $('buscarResultados');
 
 function showStatus(msg, ok){
   statusEl.textContent = msg;
@@ -739,8 +741,86 @@ function clearForm(){
   $('form').reset();
   statusEl.className = 'status';
   $('buscarHint').textContent = '';
+  ocultarResultados();
 }
 $('btnNuevo').addEventListener('click', clearForm);
+
+function ocultarResultados(){
+  resultadosEl.style.display = 'none';
+  resultadosEl.innerHTML = '';
+}
+
+function cargarOrdenEnForm(orden, d){
+  $('orden').value = d.orden || orden;
+  $('fechaCierre').value = (d.fechaCierre && d.fechaCierre !== 'N') ? d.fechaCierre : '';
+  $('fechaIng').value = d.fechaIng || '';
+  $('razonSocial').value = d.razonSocial || '';
+  $('vehiculo').value = d.vehiculo || '';
+  $('dominio').value = d.dominio || '';
+  $('total').value = d.total || '';
+  $('fechaFact').value = d.fechaFact || '';
+  $('facNro').value = d.facNro || '';
+  $('facSN').value = d.facSN || '';
+  $('pagado').checked = !!d.pagado;
+  $('buscarHint').textContent = `OR ${d.orden || orden} cargada para editar.`;
+  ocultarResultados();
+}
+
+async function buscarPorPrefijo(prefijo){
+  if (!prefijo) { ocultarResultados(); return; }
+  try {
+    const snap = await db.collection('ordenes')
+      .orderBy(firebase.firestore.FieldPath.documentId())
+      .startAt(prefijo)
+      .endAt(prefijo + '\uf8ff')
+      .limit(15)
+      .get();
+
+    if (snap.empty) {
+      resultadosEl.innerHTML = `<div style="padding:10px 12px; color:var(--text-dim); font-size:13px;">No hay OR que empiecen con "${prefijo}".</div>`;
+      resultadosEl.style.display = 'block';
+      return;
+    }
+
+    resultadosEl.innerHTML = snap.docs.map(doc => {
+      const d = doc.data();
+      const estado = (!d.fechaCierre || d.fechaCierre === 'N') ? 'abierta'
+        : (!d.fechaFact ? 'sin facturar' : (d.pagado ? 'cobrada' : 'pendiente de cobro'));
+      return `
+        <div class="resultado-item" data-orden="${doc.id}" style="padding:9px 12px; cursor:pointer; border-bottom:1px solid var(--line); font-size:13px;">
+          <strong style="color:var(--green);">${doc.id}</strong> — ${d.razonSocial || 'sin cliente'}
+          <div style="font-size:11px; color:var(--text-dim);">${d.vehiculo || ''} ${d.dominio ? '· ' + d.dominio : ''} · ${estado}</div>
+        </div>`;
+    }).join('');
+    resultadosEl.style.display = 'block';
+
+    resultadosEl.querySelectorAll('.resultado-item').forEach(item => {
+      item.addEventListener('mouseenter', () => item.style.background = 'var(--green-soft)');
+      item.addEventListener('mouseleave', () => item.style.background = '');
+      item.addEventListener('click', async () => {
+        const orden = item.dataset.orden;
+        const doc = await db.collection('ordenes').doc(orden).get();
+        if (doc.exists) cargarOrdenEnForm(orden, doc.data());
+      });
+    });
+  } catch (err) {
+    resultadosEl.innerHTML = `<div style="padding:10px 12px; color:var(--warn); font-size:13px;">Error buscando: ${err.message}</div>`;
+    resultadosEl.style.display = 'block';
+  }
+}
+
+let debounceTimer = null;
+$('buscarOrden').addEventListener('input', () => {
+  const v = $('buscarOrden').value.trim();
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => buscarPorPrefijo(v), 250);
+});
+$('buscarOrden').addEventListener('focus', () => {
+  if ($('buscarOrden').value.trim()) buscarPorPrefijo($('buscarOrden').value.trim());
+});
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.search-row')) ocultarResultados();
+});
 
 $('btnBuscar').addEventListener('click', async () => {
   const orden = $('buscarOrden').value.trim();
@@ -748,25 +828,19 @@ $('btnBuscar').addEventListener('click', async () => {
   $('buscarHint').textContent = 'Buscando...';
   try {
     const doc = await db.collection('ordenes').doc(orden).get();
-    if (!doc.exists) {
+    if (doc.exists) {
+      cargarOrdenEnForm(orden, doc.data());
+      return;
+    }
+    // no hay coincidencia exacta: mostrar las que empiecen igual, si las hay
+    await buscarPorPrefijo(orden);
+    if (resultadosEl.style.display === 'none' || !resultadosEl.innerHTML) {
       $('buscarHint').textContent = `No existe la OR ${orden}. Podés cargarla como nueva abajo.`;
       clearForm();
       $('orden').value = orden;
-      return;
+    } else {
+      $('buscarHint').textContent = `No hay una OR exacta "${orden}" — elegí una de la lista, o cargala como nueva.`;
     }
-    const d = doc.data();
-    $('orden').value = d.orden || orden;
-    $('fechaCierre').value = (d.fechaCierre && d.fechaCierre !== 'N') ? d.fechaCierre : '';
-    $('fechaIng').value = d.fechaIng || '';
-    $('razonSocial').value = d.razonSocial || '';
-    $('vehiculo').value = d.vehiculo || '';
-    $('dominio').value = d.dominio || '';
-    $('total').value = d.total || '';
-    $('fechaFact').value = d.fechaFact || '';
-    $('facNro').value = d.facNro || '';
-    $('facSN').value = d.facSN || '';
-    $('pagado').checked = !!d.pagado;
-    $('buscarHint').textContent = `OR ${orden} cargada para editar.`;
   } catch (err) {
     $('buscarHint').textContent = 'Error buscando: ' + err.message;
   }
