@@ -237,16 +237,29 @@
   <!-- ================= CARGA ================= -->
   <div class="tab-view" id="view-carga">
     <div class="panel">
+      <div class="panel-head"><h2>Pegar filas desde Excel</h2></div>
+      <div class="panel-sub">
+        Seleccioná en el Excel las filas nuevas o modificadas (columnas A hasta AI, tal cual están en el archivo — no importa que incluyan las columnas ocultas) y copialas con Ctrl+C. Después pegalas acá abajo con Ctrl+V y tocá "Procesar".
+      </div>
+      <textarea id="pasteArea" rows="8" style="width:100%; background:var(--panel-2); border:1px solid var(--line); color:var(--text); padding:10px 12px; border-radius:5px; font-family:var(--mono); font-size:12px;" placeholder="Pegá acá las filas copiadas de Excel..."></textarea>
+      <div class="actions">
+        <button type="button" class="btn" id="btnProcesar">Procesar y guardar</button>
+        <button type="button" class="btn secondary" id="btnLimpiarPaste">Limpiar</button>
+      </div>
+      <div id="pasteLog" style="margin-top:14px; font-family:var(--mono); font-size:12px; max-height:260px; overflow-y:auto;"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Ajuste puntual de una OR</h2></div>
+      <div class="panel-sub">Para corregir un dato suelto sin tener que volver al Excel — buscá la OR por número y editá lo que haga falta.</div>
       <label>Buscar OR existente por número</label>
       <div class="search-row">
         <input type="text" id="buscarOrden" placeholder="Ej: 01528">
         <button class="btn secondary" id="btnBuscar">Buscar</button>
       </div>
       <div class="hint" id="buscarHint"></div>
-    </div>
 
-    <div class="panel">
-      <form id="form">
+      <form id="form" style="margin-top:16px;">
         <label>Nº de Orden *</label>
         <input type="text" id="orden" required placeholder="01528">
 
@@ -307,6 +320,7 @@
       </form>
     </div>
   </div>
+
 
   <footer>Datos en vivo desde Firestore (colección "ordenes") · valores en pesos (ARS)</footer>
 </div>
@@ -540,7 +554,127 @@ async function cargarDatos(){
 document.getElementById('reloadBtn').addEventListener('click', cargarDatos);
 cargarDatos();
 
-// ============== CARGA ==============
+// ============== PEGADO MASIVO DESDE EXCEL ==============
+function parseFechaCierre(v){
+  v = (v||'').trim();
+  if (!v || v.toUpperCase() === 'N') return 'N';
+  return parseFechaISO(v);
+}
+function parseFechaISO(v){
+  v = (v||'').trim();
+  if (!v) return '';
+  // ya viene en ISO (YYYY-MM-DD)
+  let m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  // formato DD/MM/YYYY o DD-MM-YYYY
+  m = v.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (m) {
+    const dd = m[1].padStart(2,'0'), mm = m[2].padStart(2,'0');
+    return `${m[3]}-${mm}-${dd}`;
+  }
+  return '';
+}
+function parseNumeroAR(v){
+  v = (v||'').toString().trim();
+  if (!v) return 0;
+  v = v.replace(/[^0-9.,\-]/g, '');
+  if (v.includes(',')) {
+    v = v.replace(/\./g, '').replace(',', '.');
+  }
+  const n = parseFloat(v);
+  return isNaN(n) ? 0 : n;
+}
+function limpiaTxt(v){
+  v = (v||'').toString().trim();
+  return (v === '--' || v.toLowerCase() === 'nan') ? '' : v;
+}
+
+function parsearFilasPegadas(texto){
+  const lineas = texto.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+  const registros = [];
+  const errores = [];
+  lineas.forEach((linea, i) => {
+    const cols = linea.split('\t');
+    if (cols.length < 33) {
+      errores.push(`Línea ${i+1}: tiene ${cols.length} columnas, se esperaban al menos 33 (A hasta AG). Se salteó.`);
+      return;
+    }
+    // Índices 0-based: A=0 B=1 C=2 D=3 E=4 F=5 G=6 ... P=15 ... AC=28 AD=29 AE=30 AF=31 AG=32
+    const orden = limpiaTxt(cols[2]);
+    if (!orden) {
+      errores.push(`Línea ${i+1}: no tiene número de Orden (columna C). Se salteó.`);
+      return;
+    }
+    registros.push({
+      orden: orden,
+      fechaCierre: parseFechaCierre(cols[1]),
+      razonSocial: limpiaTxt(cols[3]),
+      vehiculo: limpiaTxt(cols[4]),
+      dominio: limpiaTxt(cols[5]),
+      fechaIng: parseFechaISO(cols[6]),
+      total: parseNumeroAR(cols[15]),
+      fechaFact: parseFechaISO(cols[28]),
+      facNro: limpiaTxt(cols[30]),
+      facSN: limpiaTxt(cols[31]),
+      pagado: limpiaTxt(cols[32]) !== '',
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  });
+  return { registros, errores };
+}
+
+function logPaste(msg, cls){
+  const el = document.getElementById('pasteLog');
+  const line = document.createElement('div');
+  if (cls) line.style.color = cls === 'ok' ? 'var(--green)' : (cls === 'err' ? 'var(--warn)' : 'var(--text-dim)');
+  line.textContent = msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+document.getElementById('btnLimpiarPaste').addEventListener('click', () => {
+  document.getElementById('pasteArea').value = '';
+  document.getElementById('pasteLog').innerHTML = '';
+});
+
+document.getElementById('btnProcesar').addEventListener('click', async () => {
+  const texto = document.getElementById('pasteArea').value;
+  const log = document.getElementById('pasteLog');
+  log.innerHTML = '';
+  if (!texto.trim()) { logPaste('No hay nada pegado.', 'err'); return; }
+
+  const { registros, errores } = parsearFilasPegadas(texto);
+  errores.forEach(e => logPaste(e, 'err'));
+
+  if (registros.length === 0) {
+    logPaste('No se encontró ninguna fila válida para guardar.', 'err');
+    return;
+  }
+
+  logPaste(`Procesando ${registros.length} fila(s)...`);
+  document.getElementById('btnProcesar').disabled = true;
+  try {
+    const BATCH_SIZE = 400;
+    let done = 0;
+    for (let i = 0; i < registros.length; i += BATCH_SIZE) {
+      const chunk = registros.slice(i, i + BATCH_SIZE);
+      const batch = db.batch();
+      chunk.forEach(rec => {
+        const ref = db.collection('ordenes').doc(rec.orden);
+        batch.set(ref, rec, { merge: true });
+      });
+      await batch.commit();
+      done += chunk.length;
+    }
+    logPaste(`✔ ${done} OR guardadas correctamente: ${registros.map(r=>r.orden).join(', ')}`, 'ok');
+    monthlyData = []; // fuerza recarga del dashboard
+  } catch (err) {
+    logPaste('Error guardando: ' + err.message, 'err');
+  }
+  document.getElementById('btnProcesar').disabled = false;
+});
+
+// ============== AJUSTE PUNTUAL (formulario individual) ==============
 const $ = (id) => document.getElementById(id);
 const statusEl = $('status');
 
