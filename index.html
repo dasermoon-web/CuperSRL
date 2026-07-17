@@ -239,7 +239,7 @@
     <div class="panel">
       <div class="panel-head"><h2>Pegar filas desde Excel</h2></div>
       <div class="panel-sub">
-        Seleccioná en el Excel las filas nuevas o modificadas (columnas A hasta AI, tal cual están en el archivo — no importa que incluyan las columnas ocultas) y copialas con Ctrl+C. Después pegalas acá abajo con Ctrl+V y tocá "Procesar".
+        En el Excel, seleccioná <strong>la fila de encabezados (donde dice Item, Fecha Cierre, Orden...) junto con las filas nuevas o modificadas</strong> que quieras cargar, y copiá todo junto con Ctrl+C. No importa qué columnas tengas ocultas ni en qué orden estén — el sistema busca los datos por el nombre de cada columna, no por su posición. Después pegá acá con Ctrl+V y tocá "Procesar".
       </div>
       <textarea id="pasteArea" rows="8" style="width:100%; background:var(--panel-2); border:1px solid var(--line); color:var(--text); padding:10px 12px; border-radius:5px; font-family:var(--mono); font-size:12px;" placeholder="Pegá acá las filas copiadas de Excel..."></textarea>
       <div class="actions">
@@ -555,6 +555,30 @@ document.getElementById('reloadBtn').addEventListener('click', cargarDatos);
 cargarDatos();
 
 // ============== PEGADO MASIVO DESDE EXCEL ==============
+function normalizarHeader(s){
+  return (s||'').toString()
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // saca acentos
+    .replace(/[^a-z0-9]/g, ''); // saca puntos, espacios, símbolos
+}
+
+// nombre normalizado de cada encabezado del Excel -> campo interno
+const MAPA_HEADERS = {
+  'fechacierre': 'fechaCierre',
+  'orden': 'orden',
+  'razonsocial': 'razonSocial',
+  'vehiculo': 'vehiculo',
+  'dominio': 'dominio',
+  'fechaing': 'fechaIng',
+  'totalciva': 'total',
+  'fechfact': 'fechaFact',
+  'facn': 'facNro',       // "Fac. Nº"
+  'facno': 'facNro',
+  'facsn': 'facSN',
+  'faccanc': 'facCancRaw',
+};
+const CAMPOS_OBLIGATORIOS = ['orden'];
+
 function parseFechaCierre(v){
   v = (v||'').trim();
   if (!v || v.toUpperCase() === 'N') return 'N';
@@ -563,10 +587,8 @@ function parseFechaCierre(v){
 function parseFechaISO(v){
   v = (v||'').trim();
   if (!v) return '';
-  // ya viene en ISO (YYYY-MM-DD)
   let m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-  // formato DD/MM/YYYY o DD-MM-YYYY
   m = v.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
   if (m) {
     const dd = m[1].padStart(2,'0'), mm = m[2].padStart(2,'0');
@@ -590,36 +612,51 @@ function limpiaTxt(v){
 }
 
 function parsearFilasPegadas(texto){
-  const lineas = texto.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-  const registros = [];
+  const lineas = texto.split(/\r?\n/).filter(l => l.trim().length > 0);
+  if (lineas.length < 2) {
+    return { registros: [], errores: ['Falta la fila de encabezados. Pegá también la fila con los nombres de columna (Item, Fecha Cierre, Orden...) arriba de los datos.'] };
+  }
+
+  const headerCols = lineas[0].split('\t').map(normalizarHeader);
+  const colIndex = {}; // campo interno -> índice de columna
+  headerCols.forEach((h, i) => {
+    const campo = MAPA_HEADERS[h];
+    if (campo && !(campo in colIndex)) colIndex[campo] = i;
+  });
+
   const errores = [];
-  lineas.forEach((linea, i) => {
-    const cols = linea.split('\t');
-    if (cols.length < 33) {
-      errores.push(`Línea ${i+1}: tiene ${cols.length} columnas, se esperaban al menos 33 (A hasta AG). Se salteó.`);
-      return;
-    }
-    // Índices 0-based: A=0 B=1 C=2 D=3 E=4 F=5 G=6 ... P=15 ... AC=28 AD=29 AE=30 AF=31 AG=32
-    const orden = limpiaTxt(cols[2]);
+  const faltantes = CAMPOS_OBLIGATORIOS.filter(c => !(c in colIndex));
+  if (faltantes.length > 0) {
+    errores.push(`No encontré la columna "Orden" en los encabezados pegados. Revisá que la primera fila pegada sea la de títulos del Excel.`);
+    return { registros: [], errores };
+  }
+
+  const registros = [];
+  for (let i = 1; i < lineas.length; i++) {
+    const cols = lineas[i].split('\t');
+    const get = (campo) => (campo in colIndex) ? (cols[colIndex[campo]] || '') : '';
+
+    const orden = limpiaTxt(get('orden'));
     if (!orden) {
-      errores.push(`Línea ${i+1}: no tiene número de Orden (columna C). Se salteó.`);
-      return;
+      errores.push(`Línea ${i+1}: no tiene número de Orden. Se salteó.`);
+      continue;
     }
+
     registros.push({
       orden: orden,
-      fechaCierre: parseFechaCierre(cols[1]),
-      razonSocial: limpiaTxt(cols[3]),
-      vehiculo: limpiaTxt(cols[4]),
-      dominio: limpiaTxt(cols[5]),
-      fechaIng: parseFechaISO(cols[6]),
-      total: parseNumeroAR(cols[15]),
-      fechaFact: parseFechaISO(cols[28]),
-      facNro: limpiaTxt(cols[30]),
-      facSN: limpiaTxt(cols[31]),
-      pagado: limpiaTxt(cols[32]) !== '',
+      fechaCierre: parseFechaCierre(get('fechaCierre')),
+      razonSocial: limpiaTxt(get('razonSocial')),
+      vehiculo: limpiaTxt(get('vehiculo')),
+      dominio: limpiaTxt(get('dominio')),
+      fechaIng: parseFechaISO(get('fechaIng')),
+      total: parseNumeroAR(get('total')),
+      fechaFact: parseFechaISO(get('fechaFact')),
+      facNro: limpiaTxt(get('facNro')),
+      facSN: limpiaTxt(get('facSN')),
+      pagado: limpiaTxt(get('facCancRaw')) !== '',
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
-  });
+  }
   return { registros, errores };
 }
 
