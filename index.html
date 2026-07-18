@@ -284,49 +284,55 @@
 
       <form id="form" style="margin-top:16px;">
         <label>Nº de Orden *</label>
-        <input type="text" id="orden" required placeholder="01528">
+        <input type="text" id="orden" required placeholder="Ej: 01528">
 
         <div class="row2">
-          <div>
-            <label>Fecha de cierre</label>
-            <input type="date" id="fechaCierre">
-            <div class="hint">Dejar vacío = orden todavía abierta</div>
-          </div>
           <div>
             <label>Fecha de ingreso</label>
             <input type="date" id="fechaIng">
           </div>
+          <div>
+            <label>Fecha de cierre</label>
+            <input type="date" id="fechaCierre">
+            <div class="hint">Vacío = orden todavía abierta (en curso)</div>
+          </div>
         </div>
 
         <label>Cliente (Razón Social)</label>
-        <input type="text" id="razonSocial" placeholder="Delta Mining">
+        <input type="text" id="razonSocial" placeholder="Ej: Delta Mining">
 
         <div class="row2">
           <div>
             <label>Vehículo</label>
-            <input type="text" id="vehiculo" placeholder="Toyota Hilux">
+            <input type="text" id="vehiculo" placeholder="Ej: Toyota Hilux">
           </div>
           <div>
             <label>Dominio</label>
-            <input type="text" id="dominio" placeholder="AF919OR">
+            <input type="text" id="dominio" placeholder="Ej: AF919OR">
           </div>
         </div>
 
         <label>Total c/IVA</label>
-        <input type="number" id="total" step="0.01" placeholder="0.00">
+        <div style="position:relative;">
+          <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-dim); font-size:14px; pointer-events:none;">$</span>
+          <input type="number" id="total" step="0.01" placeholder="Ej: 250000" style="padding-left:26px;">
+        </div>
 
         <label>Fecha de factura / conciliación</label>
         <input type="date" id="fechaFact">
-        <div class="hint">Dejar vacío si todavía no se facturó ni concilió</div>
+        <div class="hint">Vacío = todavía no se facturó ni concilió</div>
+
+        <label>Modo de pago</label>
+        <input type="text" id="condicion" placeholder="Ej: Cta. Cte. / Contado / Transf / T. Credito">
 
         <div class="row2">
           <div>
             <label>Nº de Factura</label>
-            <input type="text" id="facNro" placeholder="A09-00191">
+            <input type="text" id="facNro" placeholder="Ej: A09-00191 (vacío si no tiene)">
           </div>
           <div>
             <label>Conciliación (sin factura)</label>
-            <input type="text" id="facSN" placeholder="SF / Concilia c/Freddy">
+            <input type="text" id="facSN" placeholder="Ej: SF / Concilia c/Freddy">
           </div>
         </div>
 
@@ -748,6 +754,7 @@ const MAPA_HEADERS = {
   'fechaing': 'fechaIng',
   'totalciva': 'total',
   'fechfact': 'fechaFact',
+  'condicion': 'condicion',   // modo de pago
   'facn': 'facNro',       // "Fac. Nº"
   'facno': 'facNro',
   'facsn': 'facSN',
@@ -827,6 +834,7 @@ function parsearFilasPegadas(texto){
       fechaIng: parseFechaISO(get('fechaIng')),
       total: parseNumeroAR(get('total')),
       fechaFact: parseFechaISO(get('fechaFact')),
+      condicion: limpiaTxt(get('condicion')),
       facNro: limpiaTxt(get('facNro')),
       facSN: limpiaTxt(get('facSN')),
       pagado: limpiaTxt(get('facCancRaw')) !== '',
@@ -918,10 +926,13 @@ function cargarOrdenEnForm(orden, d){
   $('dominio').value = d.dominio || '';
   $('total').value = d.total || '';
   $('fechaFact').value = d.fechaFact || '';
+  $('condicion').value = d.condicion || '';
   $('facNro').value = d.facNro || '';
   $('facSN').value = d.facSN || '';
   $('pagado').checked = !!d.pagado;
-  $('buscarHint').textContent = `OR ${d.orden || orden} cargada para editar.`;
+  const estaCerrada = d.fechaCierre && d.fechaCierre !== 'N';
+  const estadoTxt = estaCerrada ? `cerrada el ${d.fechaCierre}` : 'todavía ABIERTA';
+  $('buscarHint').textContent = `OR ${d.orden || orden} cargada para editar — ${estadoTxt}.`;
   ocultarResultados();
 }
 
@@ -1019,6 +1030,7 @@ $('form').addEventListener('submit', async (e) => {
     dominio: $('dominio').value.trim(),
     total: parseFloat($('total').value) || 0,
     fechaFact: $('fechaFact').value || '',
+    condicion: $('condicion').value.trim(),
     facNro: $('facNro').value.trim(),
     facSN: $('facSN').value.trim(),
     pagado: $('pagado').checked,
