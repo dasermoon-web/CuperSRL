@@ -336,9 +336,12 @@
           </div>
         </div>
 
+        <label>Fecha de cobro</label>
+        <input type="date" id="fechaCobro">
+        <div class="hint">Vacío = todavía no se cobró</div>
         <div class="checkbox-row">
-          <input type="checkbox" id="pagado">
-          <label for="pagado">Ya está cobrada</label>
+          <input type="checkbox" id="cobradaSinFecha">
+          <label for="cobradaSinFecha">Cobrada, pero sin fecha exacta (equivale al "SI" del Excel)</label>
         </div>
 
         <div class="actions">
@@ -443,7 +446,7 @@ function procesarDatos(docs){
     }
     const cat = categoria(rec);
     mesesMap[mes][cat] += (rec.total || 0);
-    if (rec.pagado) mesesMap[mes].Cobrado += (rec.total || 0);
+    if (rec.fechaCobro) mesesMap[mes].Cobrado += (rec.total || 0);
     mesesMap[mes].Cantidad += 1;
   });
 
@@ -762,6 +765,15 @@ const MAPA_HEADERS = {
 };
 const CAMPOS_OBLIGATORIOS = ['orden'];
 
+function parseFechaCobro(v){
+  v = (v||'').toString().trim();
+  if (!v) return '';
+  const vu = v.toUpperCase();
+  if (vu === 'NO' || vu === 'N') return '';
+  if (vu === 'SI') return 'SI';
+  const iso = parseFechaISO(v);
+  return iso || v; // si no se puede parsear como fecha, se guarda el texto tal cual (para revisar)
+}
 function parseFechaCierre(v){
   v = (v||'').trim();
   if (!v || v.toUpperCase() === 'N') return 'N';
@@ -837,7 +849,7 @@ function parsearFilasPegadas(texto){
       condicion: limpiaTxt(get('condicion')),
       facNro: limpiaTxt(get('facNro')),
       facSN: limpiaTxt(get('facSN')),
-      pagado: limpiaTxt(get('facCancRaw')) !== '',
+      fechaCobro: parseFechaCobro(get('facCancRaw')),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
   }
@@ -911,6 +923,11 @@ function clearForm(){
   ocultarResultados();
 }
 $('btnNuevo').addEventListener('click', clearForm);
+$('cobradaSinFecha').addEventListener('change', () => {
+  const chk = $('cobradaSinFecha').checked;
+  $('fechaCobro').disabled = chk;
+  if (chk) $('fechaCobro').value = '';
+});
 
 function ocultarResultados(){
   resultadosEl.style.display = 'none';
@@ -929,10 +946,15 @@ function cargarOrdenEnForm(orden, d){
   $('condicion').value = d.condicion || '';
   $('facNro').value = d.facNro || '';
   $('facSN').value = d.facSN || '';
-  $('pagado').checked = !!d.pagado;
+  const fc = d.fechaCobro || '';
+  $('cobradaSinFecha').checked = (fc === 'SI');
+  $('fechaCobro').value = (fc && fc !== 'SI') ? fc : '';
   const estaCerrada = d.fechaCierre && d.fechaCierre !== 'N';
+  const estaFacturada = !!(d.facNro || d.facSN);
   const estadoTxt = estaCerrada ? `cerrada el ${d.fechaCierre}` : 'todavía ABIERTA';
-  $('buscarHint').textContent = `OR ${d.orden || orden} cargada para editar — ${estadoTxt}.`;
+  const facturadoTxt = estaFacturada ? 'facturada/conciliada' : 'sin facturar';
+  const cobroTxt = fc === 'SI' ? 'cobrada (sin fecha)' : (fc ? `cobrada el ${fc}` : 'sin cobrar');
+  $('buscarHint').textContent = `OR ${d.orden || orden} cargada — ${estadoTxt} · ${facturadoTxt} · ${cobroTxt}.`;
   ocultarResultados();
 }
 
@@ -955,7 +977,7 @@ async function buscarPorPrefijo(prefijo){
     resultadosEl.innerHTML = snap.docs.map(doc => {
       const d = doc.data();
       const estado = (!d.fechaCierre || d.fechaCierre === 'N') ? 'abierta'
-        : (!d.fechaFact ? 'sin facturar' : (d.pagado ? 'cobrada' : 'pendiente de cobro'));
+        : (!d.fechaFact ? 'sin facturar' : (d.fechaCobro ? 'cobrada' : 'pendiente de cobro'));
       return `
         <div class="resultado-item" data-orden="${doc.id}" style="padding:9px 12px; cursor:pointer; border-bottom:1px solid var(--line); font-size:13px;">
           <strong style="color:var(--green);">${doc.id}</strong> — ${d.razonSocial || 'sin cliente'}
@@ -1033,7 +1055,7 @@ $('form').addEventListener('submit', async (e) => {
     condicion: $('condicion').value.trim(),
     facNro: $('facNro').value.trim(),
     facSN: $('facSN').value.trim(),
-    pagado: $('pagado').checked,
+    fechaCobro: $('cobradaSinFecha').checked ? 'SI' : ($('fechaCobro').value || ''),
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
   };
 
