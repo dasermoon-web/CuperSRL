@@ -319,7 +319,19 @@
         </div>
 
         <label>Mes de facturación o conciliación</label>
-        <input type="month" id="fechaFact">
+        <div class="month-picker-wrap" style="position:relative;">
+          <button type="button" id="fechaFactBtn" class="btn secondary" style="width:100%; text-align:left; font-weight:400;">Sin facturar / conciliar</button>
+          <input type="hidden" id="fechaFact">
+          <div id="fechaFactPanel" style="display:none; position:absolute; top:calc(100% + 4px); left:0; z-index:30; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:14px; width:260px; box-shadow:0 8px 24px rgba(0,0,0,0.4);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+              <button type="button" id="fechaFactPrevYear" class="btn secondary" style="padding:4px 12px;">‹</button>
+              <span id="fechaFactYearLabel" style="font-family:var(--mono); color:var(--green); font-size:15px;"></span>
+              <button type="button" id="fechaFactNextYear" class="btn secondary" style="padding:4px 12px;">›</button>
+            </div>
+            <div id="fechaFactMonthsGrid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:6px;"></div>
+            <button type="button" id="fechaFactClear" class="btn secondary" style="width:100%; margin-top:12px;">Vaciar (no facturado)</button>
+          </div>
+        </div>
         <div class="hint">Vacío = todavía no se facturó ni concilió</div>
 
         <label>Modo de pago</label>
@@ -932,11 +944,73 @@ function showStatus(msg, ok){
 }
 function clearForm(){
   $('form').reset();
+  if (window.__setFechaFact) window.__setFechaFact('');
   statusEl.className = 'status';
   $('buscarHint').textContent = '';
   ocultarResultados();
 }
 $('btnNuevo').addEventListener('click', clearForm);
+// ============== SELECTOR VISUAL DE MES (Facturación/Conciliación) ==============
+(function(){
+  const btn = document.getElementById('fechaFactBtn');
+  const hidden = document.getElementById('fechaFact');
+  const panel = document.getElementById('fechaFactPanel');
+  const yearLabel = document.getElementById('fechaFactYearLabel');
+  const grid = document.getElementById('fechaFactMonthsGrid');
+  const prevBtn = document.getElementById('fechaFactPrevYear');
+  const nextBtn = document.getElementById('fechaFactNextYear');
+  const clearBtn = document.getElementById('fechaFactClear');
+  const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  let viewYear = new Date().getFullYear();
+
+  function renderLabel(){
+    if (!hidden.value) { btn.textContent = 'Sin facturar / conciliar'; return; }
+    const [y, m] = hidden.value.split('-');
+    const idx = parseInt(m, 10) - 1;
+    btn.textContent = (MESES[idx] || '?') + ' / ' + y;
+  }
+
+  function renderGrid(){
+    yearLabel.textContent = viewYear;
+    grid.innerHTML = MESES.map((nombre, i) => {
+      const mm = String(i + 1).padStart(2, '0');
+      const val = `${viewYear}-${mm}`;
+      const activo = hidden.value === val;
+      return `<button type="button" data-val="${val}" class="btn ${activo ? '' : 'secondary'}" style="padding:8px 0; font-size:12px;">${nombre}</button>`;
+    }).join('');
+  }
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (hidden.value) viewYear = parseInt(hidden.value.split('-')[0], 10);
+    renderGrid();
+    panel.style.display = (panel.style.display === 'none' || !panel.style.display) ? 'block' : 'none';
+  });
+  prevBtn.addEventListener('click', (e) => { e.stopPropagation(); viewYear--; renderGrid(); });
+  nextBtn.addEventListener('click', (e) => { e.stopPropagation(); viewYear++; renderGrid(); });
+  grid.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-val]');
+    if (!b) return;
+    hidden.value = b.dataset.val;
+    renderLabel();
+    panel.style.display = 'none';
+  });
+  clearBtn.addEventListener('click', () => {
+    hidden.value = '';
+    renderLabel();
+    panel.style.display = 'none';
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.month-picker-wrap')) panel.style.display = 'none';
+  });
+
+  renderLabel();
+  window.__setFechaFact = (valorISO) => {
+    hidden.value = valorISO ? valorISO.slice(0, 7) : '';
+    renderLabel();
+  };
+})();
+
 $('cobradaSinFecha').addEventListener('change', () => {
   const chk = $('cobradaSinFecha').checked;
   $('fechaCobro').disabled = chk;
@@ -956,7 +1030,7 @@ function cargarOrdenEnForm(orden, d){
   $('vehiculo').value = d.vehiculo || '';
   $('dominio').value = d.dominio || '';
   $('total').value = d.total || '';
-  $('fechaFact').value = d.fechaFact ? d.fechaFact.slice(0,7) : '';
+  window.__setFechaFact(d.fechaFact || '');
   $('condicion').value = d.condicion || '';
   $('facNro').value = d.facNro || '';
   $('facSN').value = d.facSN || '';
