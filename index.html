@@ -318,8 +318,8 @@
           <input type="number" id="total" step="0.01" placeholder="Ej: 250000" style="padding-left:26px;">
         </div>
 
-        <label>Fecha de factura / conciliación</label>
-        <input type="date" id="fechaFact">
+        <label>Mes de facturación o conciliación</label>
+        <input type="month" id="fechaFact">
         <div class="hint">Vacío = todavía no se facturó ni concilió</div>
 
         <label>Modo de pago</label>
@@ -942,7 +942,7 @@ function cargarOrdenEnForm(orden, d){
   $('vehiculo').value = d.vehiculo || '';
   $('dominio').value = d.dominio || '';
   $('total').value = d.total || '';
-  $('fechaFact').value = d.fechaFact || '';
+  $('fechaFact').value = d.fechaFact ? d.fechaFact.slice(0,7) : '';
   $('condicion').value = d.condicion || '';
   $('facNro').value = d.facNro || '';
   $('facSN').value = d.facSN || '';
@@ -1051,7 +1051,7 @@ $('form').addEventListener('submit', async (e) => {
     vehiculo: $('vehiculo').value.trim(),
     dominio: $('dominio').value.trim(),
     total: parseFloat($('total').value) || 0,
-    fechaFact: $('fechaFact').value || '',
+    fechaFact: $('fechaFact').value ? $('fechaFact').value + '-01' : '',
     condicion: $('condicion').value.trim(),
     facNro: $('facNro').value.trim(),
     facSN: $('facSN').value.trim(),
