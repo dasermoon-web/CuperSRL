@@ -698,6 +698,11 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
   firebase.auth().signOut();
 });
 
+// Pide usuario y contraseña siempre que se abre la app (no queda la sesión guardada)
+firebase.auth().setPersistence(firebase.auth.Auth.Persistence.NONE)
+  .then(() => firebase.auth().signOut())
+  .catch(() => {});
+
 firebase.auth().onAuthStateChanged((user) => {
   if (user) {
     loginScreen.style.display = 'none';
@@ -966,8 +971,13 @@ $('btnNuevo').addEventListener('click', clearForm);
   function renderLabel(){
     if (!hidden.value) { btn.textContent = 'Sin facturar / conciliar'; return; }
     const [y, m] = hidden.value.split('-');
+    const yNum = parseInt(y, 10);
     const idx = parseInt(m, 10) - 1;
-    btn.textContent = (MESES[idx] || '?') + ' / ' + y;
+    if (isNaN(yNum) || isNaN(idx) || idx < 0 || idx > 11) {
+      btn.textContent = '⚠ valor inválido — elegí un mes';
+      return;
+    }
+    btn.textContent = MESES[idx] + ' / ' + yNum;
   }
 
   function renderGrid(){
@@ -982,12 +992,13 @@ $('btnNuevo').addEventListener('click', clearForm);
 
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
-    if (hidden.value) viewYear = parseInt(hidden.value.split('-')[0], 10);
+    const parsedYear = hidden.value ? parseInt(hidden.value.split('-')[0], 10) : NaN;
+    viewYear = isNaN(parsedYear) ? new Date().getFullYear() : parsedYear;
     renderGrid();
     panel.style.display = (panel.style.display === 'none' || !panel.style.display) ? 'block' : 'none';
   });
-  prevBtn.addEventListener('click', (e) => { e.stopPropagation(); viewYear--; renderGrid(); });
-  nextBtn.addEventListener('click', (e) => { e.stopPropagation(); viewYear++; renderGrid(); });
+  prevBtn.addEventListener('click', (e) => { e.stopPropagation(); viewYear = (isNaN(viewYear) ? new Date().getFullYear() : viewYear) - 1; renderGrid(); });
+  nextBtn.addEventListener('click', (e) => { e.stopPropagation(); viewYear = (isNaN(viewYear) ? new Date().getFullYear() : viewYear) + 1; renderGrid(); });
   grid.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-val]');
     if (!b) return;
