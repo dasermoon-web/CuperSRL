@@ -193,6 +193,7 @@
   <div class="tabs">
     <button class="tab-btn active" data-tab="dashboard">📊 Dashboard</button>
     <button class="tab-btn" data-tab="carga">📝 Cargar OR</button>
+    <button class="tab-btn" data-tab="usuarios">👤 Usuarios</button>
   </div>
 
   <!-- ================= DASHBOARD ================= -->
@@ -343,6 +344,30 @@
     </div>
   </div>
 
+  <!-- ================= USUARIOS ================= -->
+  <div class="tab-view" id="view-usuarios">
+    <div class="panel">
+      <div class="panel-head"><h2>Crear usuario nuevo</h2></div>
+      <div class="panel-sub">
+        Le das acceso a alguien más al panel. Elegí un nombre de usuario simple (sin espacios) y una contraseña — se la pasás por afuera (WhatsApp, en persona, etc.).
+      </div>
+      <label>Usuario</label>
+      <input type="text" id="nuevoUsuario" placeholder="ej: gerencia, juan, freddy">
+      <label>Contraseña</label>
+      <input type="password" id="nuevoPassword" placeholder="mínimo 6 caracteres">
+      <div class="actions">
+        <button type="button" class="btn" id="btnCrearUsuario">Crear usuario</button>
+      </div>
+      <div class="status" id="usuarioStatus"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Sacarle el acceso a alguien</h2></div>
+      <div class="panel-sub">
+        Por seguridad, esto todavía no se puede hacer desde acá — evita que cualquiera que entre a la app pueda borrar el acceso de otro. Se hace en la consola de Firebase: <strong>Authentication → Users</strong>, buscás a la persona, ícono de tres puntos → <strong>"Disable account"</strong> (o borrarla directamente). Es cuestión de 2 clics.
+      </div>
+    </div>
+  </div>
 
   <footer>Datos en vivo desde Firestore (colección "ordenes") · valores en pesos (ARS)</footer>
 </div>
@@ -649,6 +674,58 @@ firebase.auth().onAuthStateChanged((user) => {
   } else {
     loginScreen.style.display = 'flex';
     appWrap.style.display = 'none';
+  }
+});
+
+// ============== CREAR USUARIOS (sin perder la sesión propia) ==============
+// Usamos una segunda instancia de Firebase solo para esto: crear un usuario
+// nuevo inicia sesión automáticamente como ese usuario en Firebase, así que
+// lo hacemos en una app "invisible" aparte para no desloguearnos nosotros.
+let secondaryApp = null;
+function getSecondaryApp(){
+  if (!secondaryApp) {
+    try {
+      secondaryApp = firebase.initializeApp(firebaseConfig, 'SecundariaParaCrearUsuarios');
+    } catch (e) {
+      secondaryApp = firebase.app('SecundariaParaCrearUsuarios');
+    }
+  }
+  return secondaryApp;
+}
+
+document.getElementById('btnCrearUsuario').addEventListener('click', async () => {
+  const statusEl = document.getElementById('usuarioStatus');
+  const usuarioIngresado = document.getElementById('nuevoUsuario').value.trim().toLowerCase();
+  const pass = document.getElementById('nuevoPassword').value;
+
+  statusEl.className = 'status';
+  if (!usuarioIngresado || !pass) {
+    statusEl.textContent = 'Completá usuario y contraseña.';
+    statusEl.className = 'status err';
+    return;
+  }
+  if (pass.length < 6) {
+    statusEl.textContent = 'La contraseña necesita al menos 6 caracteres.';
+    statusEl.className = 'status err';
+    return;
+  }
+
+  const email = usuarioIngresado.includes('@') ? usuarioIngresado : usuarioIngresado + '@cupersrl.local';
+  const app2 = getSecondaryApp();
+
+  try {
+    await app2.auth().createUserWithEmailAndPassword(email, pass);
+    await app2.auth().signOut();
+    statusEl.textContent = `✔ Usuario "${usuarioIngresado}" creado. Ya puede entrar con esa contraseña.`;
+    statusEl.className = 'status ok';
+    document.getElementById('nuevoUsuario').value = '';
+    document.getElementById('nuevoPassword').value = '';
+  } catch (err) {
+    let msg = 'No se pudo crear el usuario.';
+    if (err.code === 'auth/email-already-in-use') msg = 'Ese usuario ya existe.';
+    else if (err.code === 'auth/weak-password') msg = 'Contraseña muy débil (mínimo 6 caracteres).';
+    statusEl.textContent = msg;
+    statusEl.className = 'status err';
   }
 });
 
