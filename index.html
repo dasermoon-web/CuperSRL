@@ -344,6 +344,11 @@
           <label for="cobradaSinFecha">Cobrada, pero sin fecha exacta (equivale al "SI" del Excel)</label>
         </div>
 
+        <div class="checkbox-row">
+          <input type="checkbox" id="pendienteCobro">
+          <label for="pendienteCobro">Marcar como "pendiente de cobro" (columna O del Excel)</label>
+        </div>
+
         <div class="actions">
           <button type="submit" class="btn" id="btnGuardar">Guardar</button>
           <button type="button" class="btn secondary" id="btnNuevo">Limpiar / nueva OR</button>
@@ -404,9 +409,13 @@ const fmtMoneyShort = (n) => {
   return '$' + Math.round(n);
 };
 const monthLabel = (m) => {
-  const [y,mo] = m.split('-');
+  const match = (m||'').match(/^(\d{4})-(\d{2})/);
+  if (!match) return '⚠ mes inválido';
+  const [, y, mo] = match;
+  const idx = parseInt(mo, 10) - 1;
   const names = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  return names[parseInt(mo,10)-1] + " '" + y.slice(2);
+  if (idx < 0 || idx > 11) return '⚠ mes inválido';
+  return names[idx] + " '" + y.slice(2);
 };
 const fmtFechaDDMMAA = (d) => {
   if (!d) return '—';
@@ -419,6 +428,7 @@ const fmtFechaDDMMAA = (d) => {
 let monthlyData = [];
 let openOrders = [];
 let pendientesFacturar = [];
+let pendientesCobroMarcados = [];
 
 function categoria(rec){
   if (rec.facNro && rec.facNro !== '') return 'Facturado';
@@ -430,6 +440,7 @@ function procesarDatos(docs){
   const mesesMap = {};
   openOrders = [];
   pendientesFacturar = [];
+  pendientesCobroMarcados = docs.filter(rec => rec.pendienteCobro && rec.total);
 
   docs.forEach(rec => {
     if (!rec.fechaCierre || rec.fechaCierre === 'N') {
@@ -520,12 +531,13 @@ function renderKPIs(){
   const mesElegido = mesSel.value || monthlyData[monthlyData.length-1].Mes;
   const datos = monthlyData.find(r => r.Mes === mesElegido) || monthlyData[monthlyData.length-1];
   const totalPendFacturar = pendientesFacturar.reduce((a,r)=>a + (r.total||0), 0);
+  const totalPendCobro = pendientesCobroMarcados.reduce((a,r)=>a + (r.total||0), 0);
 
   const kpiRow = document.getElementById('kpi-row');
   const kpis = [
     { label: `Facturado — ${monthLabel(datos.Mes)}`, value: fmtMoney(datos.Facturado), sub: 'con factura real (columna AE)', cls:'' },
     { label: `Conciliado — ${monthLabel(datos.Mes)}`, value: fmtMoney(datos.Conciliado), sub: 'sin factura (columna AF)', cls:'' },
-    { label: `Pendiente de cobro — ${monthLabel(datos.Mes)}`, value: fmtMoney(datos.Pendiente), sub: datos.Pendiente > 0 ? 'ya facturado, falta cobrar' : 'todo cobrado', cls: datos.Pendiente>0 ? 'warn':'ok' },
+    { label: 'Pendiente de cobro', value: fmtMoney(totalPendCobro), sub: `${pendientesCobroMarcados.length} OR marcadas (columna O, siempre a hoy)`, cls: totalPendCobro>0 ? 'warn':'ok' },
     { label: 'Pendiente de facturar / conciliar', value: fmtMoney(totalPendFacturar), sub: `${pendientesFacturar.length} OR con trabajo terminado (siempre a hoy)`, cls: totalPendFacturar>0 ? 'warn':'ok' },
     { label: 'Órdenes abiertas ahora', value: openOrders.length, sub: 'trabajo todavía en curso (siempre a hoy)', cls:'warn' },
   ];
@@ -756,6 +768,7 @@ const MAPA_HEADERS = {
   'dominio': 'dominio',
   'fechaing': 'fechaIng',
   'totalciva': 'total',
+  'penfact': 'pendienteCobroRaw',  // columna O
   'fechfact': 'fechaFact',
   'condicion': 'condicion',   // modo de pago
   'facn': 'facNro',       // "Fac. Nº"
@@ -850,6 +863,7 @@ function parsearFilasPegadas(texto){
       facNro: limpiaTxt(get('facNro')),
       facSN: limpiaTxt(get('facSN')),
       fechaCobro: parseFechaCobro(get('facCancRaw')),
+      pendienteCobro: limpiaTxt(get('pendienteCobroRaw')).toLowerCase() === 's',
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
   }
@@ -949,6 +963,7 @@ function cargarOrdenEnForm(orden, d){
   const fc = d.fechaCobro || '';
   $('cobradaSinFecha').checked = (fc === 'SI');
   $('fechaCobro').value = (fc && fc !== 'SI') ? fc : '';
+  $('pendienteCobro').checked = !!d.pendienteCobro;
   const estaCerrada = d.fechaCierre && d.fechaCierre !== 'N';
   const estaFacturada = !!(d.facNro || d.facSN);
   const estadoTxt = estaCerrada ? `cerrada el ${d.fechaCierre}` : 'todavía ABIERTA';
@@ -1056,6 +1071,7 @@ $('form').addEventListener('submit', async (e) => {
     facNro: $('facNro').value.trim(),
     facSN: $('facSN').value.trim(),
     fechaCobro: $('cobradaSinFecha').checked ? 'SI' : ($('fechaCobro').value || ''),
+    pendienteCobro: $('pendienteCobro').checked,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
   };
 
