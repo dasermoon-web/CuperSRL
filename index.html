@@ -183,7 +183,6 @@
       </div>
     </div>
     <div class="updated">
-      Conectado a Firestore en vivo<br>
       Última carga: <span id="last-month-tag">—</span><br>
       <button id="reloadBtn">↻ Actualizar ahora</button>
       <button id="logoutBtn" style="margin-left:6px;">⎋ Cerrar sesión</button>
@@ -201,28 +200,20 @@
     <div id="loadingMsg">Cargando datos desde Firestore...</div>
 
     <div id="content" style="display:none;">
-      <div class="panel-head" style="margin-bottom:14px;">
-        <h2 style="margin:0;">Mes a consultar</h2>
-        <select id="mesSelector" style="width:auto; min-width:160px; background:var(--panel-2); border:1px solid var(--line); color:var(--text); padding:8px 12px; border-radius:5px; font-family:var(--mono); font-size:13px;"></select>
-      </div>
+      <div class="panel-sub" style="margin:-4px 0 10px;">Tocá cualquier tarjeta para ver el detalle de esas OR.</div>
       <div class="kpis" id="kpi-row"></div>
 
-      <div class="panel">
+      <div class="panel" id="detalleKpiPanel" style="display:none;">
         <div class="panel-head">
-          <h2>Facturado vs. Conciliado <span class="n" id="chart-range-label"></span></h2>
-          <div class="filters" id="range-filters">
-            <button data-range="12">Últimos 12 meses</button>
-            <button data-range="24">Últimos 24 meses</button>
-            <button data-range="all" class="active">Histórico completo</button>
-          </div>
+          <h2 id="detalleKpiTitulo">Detalle</h2>
+          <button type="button" class="btn secondary" id="detalleKpiCerrar">Cerrar ✕</button>
         </div>
-        <div class="panel-sub">Agrupado por mes de factura/conciliación, no por mes de cierre de la OR.</div>
-        <div class="legend-mini" style="margin-bottom:10px;">
-          <span><span class="dot" style="background:var(--green)"></span>Facturado</span>
-          <span><span class="dot" style="background:var(--teal)"></span>Conciliado (sin factura)</span>
-          <span><span class="dot" style="background:var(--warn)"></span>Pendiente de cobro</span>
+        <div style="max-height:420px; overflow-y:auto;">
+          <table>
+            <thead><tr><th>Orden</th><th style="text-align:left;">Cliente</th><th style="text-align:left;">Vehículo</th><th>Fecha</th><th>Importe</th></tr></thead>
+            <tbody id="detalleKpiBody"></tbody>
+          </table>
         </div>
-        <div id="chartScroll"></div>
       </div>
 
       <div class="panel">
@@ -236,22 +227,6 @@
             <tbody id="monthly-table-body"></tbody>
           </table>
         </div>
-      </div>
-
-      <div class="panel">
-        <div class="panel-head"><h2>Pendientes de facturar / conciliar <span class="n" id="pf-count"></span></h2></div>
-        <div class="panel-sub">OR con trabajo terminado que todavía no tienen factura ni conciliación cargada.</div>
-        <div style="max-height:340px; overflow-y:auto;">
-          <table>
-            <thead><tr><th>Orden</th><th style="text-align:left;">Cliente</th><th style="text-align:left;">Vehículo</th><th>Fecha cierre</th><th>Importe</th></tr></thead>
-            <tbody id="pf-table-body"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="panel">
-        <div class="panel-head"><h2>Órdenes abiertas (trabajo en curso) <span class="n" id="oo-count"></span></h2></div>
-        <div class="oo-grid" id="oo-grid"></div>
       </div>
     </div>
   </div>
@@ -403,7 +378,6 @@
   <footer>Datos en vivo desde Firestore (colección "ordenes") · valores en pesos (ARS)</footer>
 </div>
 
-<div id="tooltip"></div>
 
 <script src="firebase-config.js"></script>
 <script>
@@ -439,7 +413,9 @@ const fmtFechaDDMMAA = (d) => {
   const dd = String(d.getDate()).padStart(2,'0');
   const mm = String(d.getMonth()+1).padStart(2,'0');
   const aa = String(d.getFullYear()).slice(2);
-  return `${dd}/${mm}/${aa}`;
+  const hh = String(d.getHours()).padStart(2,'0');
+  const min = String(d.getMinutes()).padStart(2,'0');
+  return `${dd}/${mm}/${aa} ${hh}:${min}`;
 };
 
 let monthlyData = [];
@@ -447,6 +423,7 @@ let openOrders = [];
 let pendientesFacturar = [];
 let pendientesCobroMarcados = [];
 let facturasImpagas = [];
+let todosLosDocs = [];
 
 function categoria(rec){
   if (rec.facNro && rec.facNro !== '') return 'Facturado';
@@ -456,6 +433,7 @@ function categoria(rec){
 
 function procesarDatos(docs){
   const mesesMap = {};
+  todosLosDocs = docs;
   openOrders = [];
   pendientesFacturar = [];
   pendientesCobroMarcados = docs.filter(rec => rec.pendienteCobro && rec.total);
@@ -499,20 +477,8 @@ function render(){
     return;
   }
 
-  // ---- selector de mes ----
-  const mesSel = document.getElementById('mesSelector');
-  const mesActualValor = mesSel.value; // conservar selección si ya había una
-  mesSel.innerHTML = monthlyData.slice().reverse().map(r =>
-    `<option value="${r.Mes}">${monthLabel(r.Mes)}</option>`
-  ).join('');
-  if (mesActualValor && monthlyData.some(r => r.Mes === mesActualValor)) {
-    mesSel.value = mesActualValor;
-  } else {
-    mesSel.value = monthlyData[monthlyData.length-1].Mes; // último mes por defecto
-  }
-
   renderKPIs();
-  renderChart('all');
+  cerrarDetalleKPI();
 
   const tbody = document.getElementById('monthly-table-body');
   tbody.innerHTML = monthlyData.slice().reverse().map(r => `
@@ -522,134 +488,95 @@ function render(){
       <td class="pend-cell ${r.Pendiente>0?'':'zero'}">${fmtMoney(r.Pendiente)}</td>
     </tr>
   `).join('');
-
-  document.getElementById('pf-count').textContent = `(${pendientesFacturar.length})`;
-  document.getElementById('pf-table-body').innerHTML = pendientesFacturar.map(o => `
-    <tr>
-      <td>${o.orden}</td>
-      <td style="text-align:left;">${o.razonSocial || ''}</td>
-      <td style="text-align:left;">${o.vehiculo || ''} ${o.dominio ? '· ' + o.dominio : ''}</td>
-      <td>${o.fechaCierre || ''}</td>
-      <td class="pend-cell">${fmtMoney(o.total||0)}</td>
-    </tr>
-  `).join('');
-
-  document.getElementById('oo-count').textContent = `(${openOrders.length})`;
-  document.getElementById('oo-grid').innerHTML = openOrders.map(o => `
-    <div class="oo-card">
-      <div class="oo-num">OR ${o.orden}</div>
-      <div class="oo-client">${o.razonSocial || 'Sin datos'}</div>
-      <div class="oo-veh">${o.vehiculo || ''} ${o.dominio ? '· ' + o.dominio : ''}</div>
-      <div class="oo-date">Ingreso: ${o.fechaIng || '—'}</div>
-    </div>
-  `).join('');
 }
 
 function renderKPIs(){
-  const mesSel = document.getElementById('mesSelector');
-  const mesElegido = mesSel.value || monthlyData[monthlyData.length-1].Mes;
-  const datos = monthlyData.find(r => r.Mes === mesElegido) || monthlyData[monthlyData.length-1];
+  const last = monthlyData[monthlyData.length-1];
   const totalPendFacturar = pendientesFacturar.reduce((a,r)=>a + (r.total||0), 0);
   const totalPendFacturacion = pendientesCobroMarcados.reduce((a,r)=>a + (r.total||0), 0);
   const totalFacturasImpagas = facturasImpagas.reduce((a,r)=>a + (r.total||0), 0);
 
   const kpiRow = document.getElementById('kpi-row');
   const kpis = [
-    { label: `Facturado — ${monthLabel(datos.Mes)}`, value: fmtMoney(datos.Facturado), cls:'' },
-    { label: `Conciliado — ${monthLabel(datos.Mes)}`, value: fmtMoney(datos.Conciliado), cls:'' },
-    { label: 'Pendiente de facturación', value: fmtMoney(totalPendFacturacion), cls: totalPendFacturacion>0 ? 'warn':'ok' },
-    { label: 'Facturas pendientes de pago', value: fmtMoney(totalFacturasImpagas), cls: totalFacturasImpagas>0 ? 'warn':'ok' },
-    { label: 'Pendiente de facturar / conciliar', value: fmtMoney(totalPendFacturar), cls: totalPendFacturar>0 ? 'warn':'ok' },
-    { label: 'Órdenes abiertas ahora', value: openOrders.length, cls:'warn' },
+    { tipo: 'facturado', label: `Facturado — ${monthLabel(last.Mes)}`, value: fmtMoney(last.Facturado), cls:'' },
+    { tipo: 'conciliado', label: `Conciliado — ${monthLabel(last.Mes)}`, value: fmtMoney(last.Conciliado), cls:'' },
+    { tipo: 'pendFacturacion', label: 'Pendiente de facturación', value: fmtMoney(totalPendFacturacion), cls: totalPendFacturacion>0 ? 'warn':'ok' },
+    { tipo: 'facturasImpagas', label: 'Facturas pendientes de pago', value: fmtMoney(totalFacturasImpagas), cls: totalFacturasImpagas>0 ? 'warn':'ok' },
+    { tipo: 'pendFacturar', label: 'Pendiente de facturar / conciliar', value: fmtMoney(totalPendFacturar), cls: totalPendFacturar>0 ? 'warn':'ok' },
+    { tipo: 'abiertas', label: 'Órdenes abiertas ahora', value: openOrders.length, cls:'warn' },
   ];
   kpiRow.innerHTML = kpis.map(k => `
-    <div class="kpi ${k.cls}">
+    <div class="kpi ${k.cls}" data-tipo="${k.tipo}" style="cursor:pointer;">
       <div class="label">${k.label}</div>
       <div class="value">${k.value}</div>
     </div>
   `).join('');
+
+  kpiRow.querySelectorAll('.kpi').forEach(el => {
+    el.addEventListener('click', () => mostrarDetalleKPI(el.dataset.tipo));
+  });
 }
-document.getElementById('mesSelector').addEventListener('change', renderKPIs);
 
-// ---------- Chart SVG nativo ----------
-const chartScroll = document.getElementById('chartScroll');
-const tooltip = document.getElementById('tooltip');
-const SVG_NS = 'http://www.w3.org/2000/svg';
+let kpiActivo = null;
 
-function renderChart(range){
-  const data = range === 'all' ? monthlyData : monthlyData.slice(-range);
-  const height = 320, padTop = 16, padBottom = 32, padLeft = 60, padRight = 16;
-  const plotH = height - padTop - padBottom;
-  const barW = data.length > 30 ? 14 : (data.length > 15 ? 22 : 34);
-  const gap = data.length > 30 ? 10 : (data.length > 15 ? 16 : 26);
-  const step = barW + gap;
-  const plotW = data.length * step;
-  const width = Math.max(plotW + padLeft + padRight, chartScroll.clientWidth || 600);
-  const maxVal = Math.max(1, ...data.map(r => r.Total));
-  const magnitude = Math.pow(10, Math.floor(Math.log10(maxVal)));
-  const niceMax = Math.ceil(maxVal / (magnitude/2)) * (magnitude/2);
-  const yScale = (v) => plotH - (v / niceMax) * plotH;
+function cerrarDetalleKPI(){
+  kpiActivo = null;
+  document.getElementById('detalleKpiPanel').style.display = 'none';
+  document.querySelectorAll('#kpi-row .kpi').forEach(el => el.style.outline = '');
+}
+document.getElementById('detalleKpiCerrar').addEventListener('click', cerrarDetalleKPI);
 
-  let svg = `<svg xmlns="${SVG_NS}" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">`;
-  for(let i=0;i<=4;i++){
-    const v = niceMax * i / 4;
-    const y = padTop + yScale(v);
-    svg += `<line class="grid-line" x1="${padLeft}" y1="${y}" x2="${width-padRight}" y2="${y}"></line>`;
-    svg += `<text class="axis-label" x="${padLeft-8}" y="${y+3}" text-anchor="end">${fmtMoneyShort(v)}</text>`;
+function mostrarDetalleKPI(tipo){
+  if (kpiActivo === tipo) { cerrarDetalleKPI(); return; }
+  kpiActivo = tipo;
+  document.querySelectorAll('#kpi-row .kpi').forEach(el => {
+    el.style.outline = (el.dataset.tipo === tipo) ? '2px solid var(--green)' : '';
+  });
+
+  const last = monthlyData[monthlyData.length-1];
+  let lista = [];
+  let titulo = '';
+  let fechaCol = (o) => (o.fechaCierre && o.fechaCierre !== 'N') ? o.fechaCierre : (o.fechaIng || '');
+
+  if (tipo === 'facturado') {
+    lista = todosLosDocs.filter(r => r.fechaFact && r.fechaFact.slice(0,7) === last.Mes && categoria(r) === 'Facturado');
+    titulo = `Facturado — ${monthLabel(last.Mes)}`;
+    fechaCol = (o) => o.fechaFact;
+  } else if (tipo === 'conciliado') {
+    lista = todosLosDocs.filter(r => r.fechaFact && r.fechaFact.slice(0,7) === last.Mes && categoria(r) === 'Conciliado');
+    titulo = `Conciliado — ${monthLabel(last.Mes)}`;
+    fechaCol = (o) => o.fechaFact;
+  } else if (tipo === 'pendFacturacion') {
+    lista = pendientesCobroMarcados;
+    titulo = 'Pendiente de facturación';
+  } else if (tipo === 'facturasImpagas') {
+    lista = facturasImpagas;
+    titulo = 'Facturas pendientes de pago';
+  } else if (tipo === 'pendFacturar') {
+    lista = pendientesFacturar;
+    titulo = 'Pendiente de facturar / conciliar';
+  } else if (tipo === 'abiertas') {
+    lista = openOrders;
+    titulo = 'Órdenes abiertas';
   }
-  const labelEvery = data.length > 40 ? 4 : (data.length > 24 ? 2 : 1);
-  data.forEach((r, i) => {
-    const x = padLeft + i*step;
-    const facturadoH = plotH - yScale(r.Facturado);
-    const conciliadoH = plotH - yScale(r.Conciliado);
-    const pendienteH = plotH - yScale(r.Pendiente);
-    const yFacturado = padTop + plotH - facturadoH;
-    const yConciliado = yFacturado - conciliadoH;
-    const yPendiente = yConciliado - pendienteH;
-    svg += `<g class="bar-group" data-idx="${i}">`;
-    svg += `<rect class="bar-facturado" x="${x}" y="${yFacturado}" width="${barW}" height="${Math.max(facturadoH,0)}" rx="2"></rect>`;
-    if (r.Conciliado > 0) svg += `<rect class="bar-conciliado" x="${x}" y="${yConciliado}" width="${barW}" height="${Math.max(conciliadoH,1)}" rx="2"></rect>`;
-    if (r.Pendiente > 0) svg += `<rect class="bar-pendiente" x="${x}" y="${yPendiente}" width="${barW}" height="${Math.max(pendienteH,2)}" rx="2"></rect>`;
-    svg += `<rect x="${x-gap/2}" y="${padTop}" width="${barW+gap}" height="${plotH}" fill="transparent"></rect></g>`;
-    if (i % labelEvery === 0) svg += `<text class="axis-label" x="${x+barW/2}" y="${height-padBottom+16}" text-anchor="middle">${monthLabel(r.Mes)}</text>`;
-  });
-  svg += `</svg>`;
-  chartScroll.innerHTML = svg;
-  chartScroll.scrollLeft = chartScroll.scrollWidth;
 
-  chartScroll.querySelectorAll('.bar-group').forEach(g => {
-    const idx = parseInt(g.dataset.idx, 10);
-    const r = data[idx];
-    g.addEventListener('mousemove', (e) => {
-      tooltip.style.display = 'block';
-      tooltip.style.left = (e.clientX + 14) + 'px';
-      tooltip.style.top = (e.clientY + 14) + 'px';
-      tooltip.innerHTML = `
-        <div class="tt-month">${monthLabel(r.Mes)}</div>
-        <div class="tt-row"><span>OR</span><span>${r.Cantidad}</span></div>
-        <div class="tt-row"><span>Facturado</span><span>${fmtMoney(r.Facturado)}</span></div>
-        <div class="tt-row"><span>Conciliado</span><span>${fmtMoney(r.Conciliado)}</span></div>
-        <div class="tt-row"><span>Total</span><span>${fmtMoney(r.Total)}</span></div>
-        <div class="tt-row"><span>Cobrado</span><span>${fmtMoney(r.Cobrado)}</span></div>
-        <div class="tt-row"><span>Pendiente</span><span class="v-pend">${fmtMoney(r.Pendiente)}</span></div>`;
-    });
-    g.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
-  });
+  document.getElementById('detalleKpiTitulo').textContent = `${titulo} (${lista.length})`;
+  document.getElementById('detalleKpiBody').innerHTML = lista.length
+    ? lista.map(o => `
+        <tr>
+          <td>${o.orden}</td>
+          <td style="text-align:left;">${o.razonSocial || ''}</td>
+          <td style="text-align:left;">${o.vehiculo || ''} ${o.dominio ? '· ' + o.dominio : ''}</td>
+          <td>${fechaCol(o) || ''}</td>
+          <td>${fmtMoney(o.total||0)}</td>
+        </tr>
+      `).join('')
+    : '<tr><td colspan="5" style="text-align:center; color:var(--text-dim);">Sin registros</td></tr>';
+
+  const panel = document.getElementById('detalleKpiPanel');
+  panel.style.display = 'block';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
-
-document.querySelectorAll('#range-filters button').forEach(btn=>{
-  btn.addEventListener('click', ()=>{
-    document.querySelectorAll('#range-filters button').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');
-    const r = btn.dataset.range;
-    renderChart(r === 'all' ? 'all' : parseInt(r,10));
-  });
-});
-window.addEventListener('resize', () => {
-  const activeBtn = document.querySelector('#range-filters button.active');
-  const r = activeBtn ? activeBtn.dataset.range : 'all';
-  if (monthlyData.length) renderChart(r === 'all' ? 'all' : parseInt(r,10));
-});
 
 let ultimaCargaFecha = null;
 
