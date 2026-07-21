@@ -200,7 +200,7 @@
     <div id="loadingMsg">Cargando datos desde Firestore...</div>
 
     <div id="content" style="display:none;">
-      <div class="panel-sub" style="margin:-4px 0 10px;">Tocá cualquier tarjeta para ver el detalle de esas OR.</div>
+      <div class="panel-sub" style="margin:-4px 0 10px;">Tocá cualquier tarjeta para ver el detalle.</div>
       <div class="kpis" id="kpi-row"></div>
 
       <div class="panel" id="detalleKpiPanel" style="display:none;">
@@ -208,24 +208,24 @@
           <h2 id="detalleKpiTitulo">Detalle</h2>
           <button type="button" class="btn secondary" id="detalleKpiCerrar">Cerrar ✕</button>
         </div>
-        <div style="max-height:420px; overflow-y:auto;">
+
+        <div id="detalleKpiTablaWrap" style="max-height:420px; overflow-y:auto;">
           <table>
             <thead><tr><th>Orden</th><th style="text-align:left;">Cliente</th><th style="text-align:left;">Vehículo</th><th>Fecha</th><th>Importe</th></tr></thead>
             <tbody id="detalleKpiBody"></tbody>
           </table>
         </div>
-      </div>
 
-      <div class="panel">
-        <div class="panel-head">
-          <h2>Detalle mensual</h2>
-          <div class="legend-mini"><span><span class="dot" style="background:var(--warn)"></span>Pendiente &gt; 0</span></div>
-        </div>
-        <div style="max-height:420px; overflow-y:auto;">
-          <table>
-            <thead><tr><th>Mes</th><th>OR</th><th>Facturado</th><th>Conciliado</th><th>Total</th><th>Cobrado</th><th>Pendiente</th></tr></thead>
-            <tbody id="monthly-table-body"></tbody>
-          </table>
+        <div id="detalleKpiChartWrap" style="display:none;">
+          <div style="margin-bottom:14px;">
+            <label style="display:block; font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--text-dim); margin-bottom:6px;">Año</label>
+            <select id="detalleAnioSelector" style="background:var(--panel-2); border:1px solid var(--line); color:var(--text); padding:8px 12px; border-radius:5px; font-family:var(--mono); font-size:13px;"></select>
+          </div>
+          <div class="legend-mini" style="margin-bottom:10px;">
+            <span><span class="dot" style="background:var(--green)"></span>Facturado</span>
+            <span><span class="dot" style="background:var(--teal)"></span>Conciliado</span>
+          </div>
+          <div id="detalleChartScroll" style="overflow-x:auto;"></div>
         </div>
       </div>
     </div>
@@ -487,15 +487,6 @@ function render(){
 
   renderKPIs();
   cerrarDetalleKPI();
-
-  const tbody = document.getElementById('monthly-table-body');
-  tbody.innerHTML = monthlyData.slice().reverse().map(r => `
-    <tr>
-      <td>${monthLabel(r.Mes)}</td><td>${r.Cantidad}</td><td>${fmtMoney(r.Facturado)}</td>
-      <td>${fmtMoney(r.Conciliado)}</td><td>${fmtMoney(r.Total)}</td><td>${fmtMoney(r.Cobrado)}</td>
-      <td class="pend-cell ${r.Pendiente>0?'':'zero'}">${fmtMoney(r.Pendiente)}</td>
-    </tr>
-  `).join('');
 }
 
 function renderKPIs(){
@@ -506,6 +497,7 @@ function renderKPIs(){
 
   const kpiRow = document.getElementById('kpi-row');
   const kpis = [
+    { tipo: 'detalleMensual', label: 'Detalle mensual', value: '📊 Ver', cls:'' },
     { tipo: 'facturado', label: `Facturado — ${monthLabel(last.Mes)}`, value: fmtMoney(last.Facturado), cls:'' },
     { tipo: 'conciliado', label: `Conciliado — ${monthLabel(last.Mes)}`, value: fmtMoney(last.Conciliado), cls:'' },
     { tipo: 'pendFacturacion', label: 'Pendiente de facturación', value: fmtMoney(totalPendFacturacion), cls: totalPendFacturacion>0 ? 'warn':'ok' },
@@ -539,6 +531,23 @@ function mostrarDetalleKPI(tipo){
   document.querySelectorAll('#kpi-row .kpi').forEach(el => {
     el.style.outline = (el.dataset.tipo === tipo) ? '2px solid var(--green)' : '';
   });
+
+  const tablaWrap = document.getElementById('detalleKpiTablaWrap');
+  const chartWrap = document.getElementById('detalleKpiChartWrap');
+  const panel = document.getElementById('detalleKpiPanel');
+
+  if (tipo === 'detalleMensual') {
+    tablaWrap.style.display = 'none';
+    chartWrap.style.display = 'block';
+    document.getElementById('detalleKpiTitulo').textContent = 'Detalle mensual — Facturado vs. Conciliado';
+    prepararSelectorAnio();
+    panel.style.display = 'block';
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    return;
+  }
+
+  tablaWrap.style.display = 'block';
+  chartWrap.style.display = 'none';
 
   const last = monthlyData[monthlyData.length-1];
   let lista = [];
@@ -580,9 +589,60 @@ function mostrarDetalleKPI(tipo){
       `).join('')
     : '<tr><td colspan="5" style="text-align:center; color:var(--text-dim);">Sin registros</td></tr>';
 
-  const panel = document.getElementById('detalleKpiPanel');
   panel.style.display = 'block';
   panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ---------- Gráfico anual Facturado vs Conciliado ----------
+function prepararSelectorAnio(){
+  const sel = document.getElementById('detalleAnioSelector');
+  const anios = [...new Set(monthlyData.map(r => r.Mes.slice(0,4)))].sort().reverse();
+  const anioActual = sel.value || anios[0];
+  sel.innerHTML = anios.map(a => `<option value="${a}">${a}</option>`).join('');
+  sel.value = anios.includes(anioActual) ? anioActual : anios[0];
+  renderGraficoAnual(sel.value);
+  sel.onchange = () => renderGraficoAnual(sel.value);
+}
+
+function renderGraficoAnual(anio){
+  const NOMBRES_MES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const datosPorMes = NOMBRES_MES.map((nombre, i) => {
+    const mesKey = `${anio}-${String(i+1).padStart(2,'0')}`;
+    const encontrado = monthlyData.find(r => r.Mes === mesKey);
+    return { nombre, Facturado: encontrado ? encontrado.Facturado : 0, Conciliado: encontrado ? encontrado.Conciliado : 0 };
+  });
+
+  const height = 300, padTop = 16, padBottom = 32, padLeft = 60, padRight = 16;
+  const plotH = height - padTop - padBottom;
+  const barW = 34, gap = 26, step = barW + gap;
+  const plotW = 12 * step;
+  const contenedor = document.getElementById('detalleChartScroll');
+  const width = Math.max(plotW + padLeft + padRight, contenedor.clientWidth || 600);
+
+  const maxVal = Math.max(1, ...datosPorMes.map(d => d.Facturado + d.Conciliado));
+  const magnitude = Math.pow(10, Math.floor(Math.log10(maxVal)));
+  const niceMax = Math.ceil(maxVal / (magnitude/2)) * (magnitude/2);
+  const yScale = (v) => plotH - (v / niceMax) * plotH;
+
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">`;
+  for (let i=0; i<=4; i++){
+    const v = niceMax * i / 4;
+    const y = padTop + yScale(v);
+    svg += `<line x1="${padLeft}" y1="${y}" x2="${width-padRight}" y2="${y}" stroke="rgba(255,255,255,0.06)"></line>`;
+    svg += `<text x="${padLeft-8}" y="${y+3}" text-anchor="end" font-family="monospace" font-size="10" fill="var(--text-dim)">${fmtMoneyShort(v)}</text>`;
+  }
+  datosPorMes.forEach((d, i) => {
+    const x = padLeft + i*step;
+    const facturadoH = plotH - yScale(d.Facturado);
+    const conciliadoH = plotH - yScale(d.Conciliado);
+    const yFacturado = padTop + plotH - facturadoH;
+    const yConciliado = yFacturado - conciliadoH;
+    svg += `<rect x="${x}" y="${yFacturado}" width="${barW}" height="${Math.max(facturadoH,0)}" rx="2" fill="var(--green)"><title>${d.nombre}: Facturado ${fmtMoney(d.Facturado)}</title></rect>`;
+    if (d.Conciliado > 0) svg += `<rect x="${x}" y="${yConciliado}" width="${barW}" height="${Math.max(conciliadoH,1)}" rx="2" fill="var(--teal)"><title>${d.nombre}: Conciliado ${fmtMoney(d.Conciliado)}</title></rect>`;
+    svg += `<text x="${x+barW/2}" y="${height-padBottom+16}" text-anchor="middle" font-family="monospace" font-size="10" fill="var(--text-dim)">${d.nombre}</text>`;
+  });
+  svg += `</svg>`;
+  contenedor.innerHTML = svg;
 }
 
 let ultimaCargaFecha = null;
