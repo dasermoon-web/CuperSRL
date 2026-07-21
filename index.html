@@ -376,7 +376,6 @@
     </div>
   </div>
 
-  <footer>Datos en vivo desde Firestore (colección "ordenes") · valores en pesos (ARS)</footer>
 </div>
 
 
@@ -540,8 +539,8 @@ function mostrarDetalleKPI(tipo){
     tablaWrap.style.display = 'none';
     chartWrap.style.display = 'block';
     document.getElementById('detalleKpiTitulo').textContent = 'Detalle mensual — Facturado vs. Conciliado';
-    prepararSelectorAnio();
     panel.style.display = 'block';
+    prepararSelectorAnio();
     panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     return;
   }
@@ -612,38 +611,60 @@ function renderGraficoAnual(anio){
     return { nombre, Facturado: encontrado ? encontrado.Facturado : 0, Conciliado: encontrado ? encontrado.Conciliado : 0 };
   });
 
-  const height = 300, padTop = 16, padBottom = 32, padLeft = 60, padRight = 16;
+  const height = 320, padTop = 16, padBottom = 32, padLeft = 60, padRight = 20;
   const plotH = height - padTop - padBottom;
-  const barW = 34, gap = 26, step = barW + gap;
-  const plotW = 12 * step;
   const contenedor = document.getElementById('detalleChartScroll');
-  const width = Math.max(plotW + padLeft + padRight, contenedor.clientWidth || 600);
+  const width = Math.max(contenedor.clientWidth || 900, 320);
+  const plotW = width - padLeft - padRight;
+  const step = plotW / 12;
+  const barW = Math.min(46, step * 0.55);
 
-  const maxVal = Math.max(1, ...datosPorMes.map(d => d.Facturado + d.Conciliado));
+  const maxVal = Math.max(1, ...datosPorMes.map(d => Math.max(d.Facturado, d.Conciliado)));
   const magnitude = Math.pow(10, Math.floor(Math.log10(maxVal)));
   const niceMax = Math.ceil(maxVal / (magnitude/2)) * (magnitude/2);
   const yScale = (v) => plotH - (v / niceMax) * plotH;
 
-  let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">`;
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" height="${height}" preserveAspectRatio="none">`;
+
   for (let i=0; i<=4; i++){
     const v = niceMax * i / 4;
     const y = padTop + yScale(v);
     svg += `<line x1="${padLeft}" y1="${y}" x2="${width-padRight}" y2="${y}" stroke="rgba(255,255,255,0.06)"></line>`;
     svg += `<text x="${padLeft-8}" y="${y+3}" text-anchor="end" font-family="monospace" font-size="10" fill="var(--text-dim)">${fmtMoneyShort(v)}</text>`;
   }
+
+  // Barras: Facturado
+  const centros = [];
   datosPorMes.forEach((d, i) => {
-    const x = padLeft + i*step;
+    const xCentro = padLeft + step*i + step/2;
+    centros.push(xCentro);
+    const x = xCentro - barW/2;
     const facturadoH = plotH - yScale(d.Facturado);
-    const conciliadoH = plotH - yScale(d.Conciliado);
     const yFacturado = padTop + plotH - facturadoH;
-    const yConciliado = yFacturado - conciliadoH;
-    svg += `<rect x="${x}" y="${yFacturado}" width="${barW}" height="${Math.max(facturadoH,0)}" rx="2" fill="var(--green)"><title>${d.nombre}: Facturado ${fmtMoney(d.Facturado)}</title></rect>`;
-    if (d.Conciliado > 0) svg += `<rect x="${x}" y="${yConciliado}" width="${barW}" height="${Math.max(conciliadoH,1)}" rx="2" fill="var(--teal)"><title>${d.nombre}: Conciliado ${fmtMoney(d.Conciliado)}</title></rect>`;
-    svg += `<text x="${x+barW/2}" y="${height-padBottom+16}" text-anchor="middle" font-family="monospace" font-size="10" fill="var(--text-dim)">${d.nombre}</text>`;
+    svg += `<rect x="${x}" y="${yFacturado}" width="${barW}" height="${Math.max(facturadoH,0)}" rx="3" fill="var(--green)"><title>${d.nombre}: Facturado ${fmtMoney(d.Facturado)}</title></rect>`;
+    svg += `<text x="${xCentro}" y="${height-padBottom+16}" text-anchor="middle" font-family="monospace" font-size="10" fill="var(--text-dim)">${d.nombre}</text>`;
   });
+
+  // Línea: Conciliado, pasando por encima de las barras
+  const puntos = datosPorMes.map((d, i) => {
+    const y = padTop + yScale(d.Conciliado);
+    return `${centros[i]},${y}`;
+  });
+  svg += `<polyline points="${puntos.join(' ')}" fill="none" stroke="var(--teal)" stroke-width="2.5"></polyline>`;
+  datosPorMes.forEach((d, i) => {
+    const y = padTop + yScale(d.Conciliado);
+    svg += `<circle cx="${centros[i]}" cy="${y}" r="4" fill="var(--teal)" stroke="var(--bg)" stroke-width="1.5"><title>${d.nombre}: Conciliado ${fmtMoney(d.Conciliado)}</title></circle>`;
+  });
+
   svg += `</svg>`;
   contenedor.innerHTML = svg;
 }
+window.addEventListener('resize', () => {
+  if (kpiActivo === 'detalleMensual') {
+    const sel = document.getElementById('detalleAnioSelector');
+    if (sel && sel.value) renderGraficoAnual(sel.value);
+  }
+});
 
 let ultimaCargaFecha = null;
 
