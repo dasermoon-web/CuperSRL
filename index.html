@@ -509,7 +509,6 @@ function renderKPIs(){
     { tipo: 'conciliado', label: `Conciliado — ${monthLabel(last.Mes)}`, value: fmtMoney(last.Conciliado), cls:'' },
     { tipo: 'pendFacturacion', label: 'Pendiente de facturación', value: fmtMoney(totalPendFacturacion), cls: totalPendFacturacion>0 ? 'warn':'ok' },
     { tipo: 'facturasImpagas', label: 'Facturas pendientes de pago', value: fmtMoney(totalFacturasImpagas), cls: totalFacturasImpagas>0 ? 'warn':'ok' },
-    { tipo: 'pendFacturar', label: 'Pendiente de facturar / conciliar', value: fmtMoney(totalPendFacturar), cls: totalPendFacturar>0 ? 'warn':'ok' },
     { tipo: 'abiertas', label: 'Órdenes abiertas ahora', value: openOrders.length, cls:'warn' },
   ];
   kpiRow.innerHTML = kpis.map(k => `
