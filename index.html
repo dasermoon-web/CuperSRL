@@ -753,10 +753,30 @@ function parseFechaISO(v){
   if (!v) return '';
   let m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-  m = v.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  m = v.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
   if (m) {
     const dd = m[1].padStart(2,'0'), mm = m[2].padStart(2,'0');
-    return `${m[3]}-${mm}-${dd}`;
+    let yyyy = m[3];
+    if (yyyy.length === 2) yyyy = (parseInt(yyyy,10) < 50 ? '20' : '19') + yyyy;
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  return '';
+}
+const MESES_ABR = {'ene':1,'feb':2,'mar':3,'abr':4,'may':5,'jun':6,'jul':7,'ago':8,'sep':9,'oct':10,'nov':11,'dic':12};
+function parseMesTextoOFecha(v){
+  v = (v||'').trim();
+  if (!v) return '';
+  const iso = parseFechaISO(v);
+  if (iso) return iso;
+  // formato "jul.-26", "jul-26", "jul.26", "oct.-25"...
+  const m = v.toLowerCase().match(/^([a-záéíóúñ]{3})\.?-?(\d{2,4})$/i);
+  if (m) {
+    const mes = MESES_ABR[m[1].slice(0,3)];
+    if (mes) {
+      let yyyy = m[2];
+      if (yyyy.length === 2) yyyy = (parseInt(yyyy,10) < 50 ? '20' : '19') + yyyy;
+      return `${yyyy}-${String(mes).padStart(2,'0')}-01`;
+    }
   }
   return '';
 }
@@ -814,7 +834,7 @@ function parsearFilasPegadas(texto){
       dominio: limpiaTxt(get('dominio')),
       fechaIng: parseFechaISO(get('fechaIng')),
       total: parseNumeroAR(get('total')),
-      fechaFact: parseFechaISO(get('fechaFact')),
+      fechaFact: parseMesTextoOFecha(get('fechaFact')),
       condicion: limpiaTxt(get('condicion')),
       facNro: limpiaTxt(get('facNro')),
       facSN: limpiaTxt(get('facSN')),
