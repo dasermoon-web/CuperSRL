@@ -344,6 +344,7 @@
         <div class="actions">
           <button type="submit" class="btn" id="btnGuardar">Guardar</button>
           <button type="button" class="btn secondary" id="btnNuevo">Limpiar / nueva OR</button>
+          <button type="button" class="btn" id="btnBorrar" style="background:var(--warn); color:#fff; display:none;">Borrar esta OR</button>
         </div>
         <div class="status" id="status"></div>
       </form>
@@ -898,6 +899,7 @@ document.getElementById('btnProcesar').addEventListener('click', async () => {
     }
     logPaste(`✔ ${done} OR guardadas correctamente: ${registros.map(r=>r.orden).join(', ')}`, 'ok');
     monthlyData = []; // fuerza recarga del dashboard
+    document.getElementById('pasteArea').value = '';
   } catch (err) {
     logPaste('Error guardando: ' + err.message, 'err');
   }
@@ -918,6 +920,7 @@ function clearForm(){
   if (window.__setFechaFact) window.__setFechaFact('');
   statusEl.className = 'status';
   $('buscarHint').textContent = '';
+  $('btnBorrar').style.display = 'none';
   ocultarResultados();
 }
 $('btnNuevo').addEventListener('click', clearForm);
@@ -1022,6 +1025,7 @@ function cargarOrdenEnForm(orden, d){
   const facturadoTxt = estaFacturada ? 'facturada/conciliada' : 'sin facturar';
   const cobroTxt = fc === 'SI' ? 'cobrada (sin fecha)' : (fc ? `cobrada el ${fmtISOaDDMMAA(fc)}` : 'sin cobrar');
   $('buscarHint').textContent = `OR ${d.orden || orden} cargada — ${estadoTxt} · ${facturadoTxt} · ${cobroTxt}.`;
+  $('btnBorrar').style.display = 'inline-block';
   ocultarResultados();
 }
 
@@ -1131,12 +1135,34 @@ $('form').addEventListener('submit', async (e) => {
   $('btnGuardar').disabled = true;
   try {
     await db.collection('ordenes').doc(orden).set(rec, { merge: true });
-    showStatus(`✔ OR ${orden} guardada correctamente.`, true);
     monthlyData = []; // fuerza recarga del dashboard la próxima vez que se muestre
+    clearForm();
+    showStatus(`✔ OR ${orden} guardada correctamente. Formulario listo para la próxima búsqueda.`, true);
   } catch (err) {
     showStatus('Error al guardar: ' + err.message, false);
   }
   $('btnGuardar').disabled = false;
+});
+
+$('btnBorrar').addEventListener('click', async () => {
+  const orden = $('orden').value.trim();
+  if (!orden) return;
+  const confirmacion = prompt(`Esto borra la OR "${orden}" para siempre, no se puede deshacer.\n\nEscribí el número de Orden para confirmar:`);
+  if (confirmacion === null) return; // canceló
+  if (confirmacion.trim() !== orden) {
+    showStatus('No coincide el número escrito, no se borró nada.', false);
+    return;
+  }
+  $('btnBorrar').disabled = true;
+  try {
+    await db.collection('ordenes').doc(orden).delete();
+    showStatus(`✔ OR ${orden} borrada.`, true);
+    clearForm();
+    monthlyData = [];
+  } catch (err) {
+    showStatus('Error al borrar: ' + err.message, false);
+  }
+  $('btnBorrar').disabled = false;
 });
 </script>
 </body>
