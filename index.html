@@ -417,6 +417,13 @@ const fmtFechaDDMMAA = (d) => {
   const min = String(d.getMinutes()).padStart(2,'0');
   return `${dd}/${mm}/${aa} ${hh}:${min}`;
 };
+// Convierte una fecha guardada como texto "YYYY-MM-DD" a "DD/MM/AA" para mostrar en tablas
+const fmtISOaDDMMAA = (isoStr) => {
+  if (!isoStr) return '';
+  const m = (''+isoStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return isoStr; // si no tiene formato de fecha (ej. "N"), lo dejamos tal cual
+  return `${m[3]}/${m[2]}/${m[1].slice(2)}`;
+};
 
 let monthlyData = [];
 let openOrders = [];
@@ -567,7 +574,7 @@ function mostrarDetalleKPI(tipo){
           <td>${o.orden}</td>
           <td style="text-align:left;">${o.razonSocial || ''}</td>
           <td style="text-align:left;">${o.vehiculo || ''} ${o.dominio ? '· ' + o.dominio : ''}</td>
-          <td>${fechaCol(o) || ''}</td>
+          <td>${fmtISOaDDMMAA(fechaCol(o))}</td>
           <td>${fmtMoney(o.total||0)}</td>
         </tr>
       `).join('')
@@ -1012,9 +1019,9 @@ function cargarOrdenEnForm(orden, d){
   $('facturaImpaga').checked = !!d.facturaImpaga;
   const estaCerrada = d.fechaCierre && d.fechaCierre !== 'N';
   const estaFacturada = !!(d.facNro || d.facSN);
-  const estadoTxt = estaCerrada ? `cerrada el ${d.fechaCierre}` : 'todavía ABIERTA';
+  const estadoTxt = estaCerrada ? `cerrada el ${fmtISOaDDMMAA(d.fechaCierre)}` : 'todavía ABIERTA';
   const facturadoTxt = estaFacturada ? 'facturada/conciliada' : 'sin facturar';
-  const cobroTxt = fc === 'SI' ? 'cobrada (sin fecha)' : (fc ? `cobrada el ${fc}` : 'sin cobrar');
+  const cobroTxt = fc === 'SI' ? 'cobrada (sin fecha)' : (fc ? `cobrada el ${fmtISOaDDMMAA(fc)}` : 'sin cobrar');
   $('buscarHint').textContent = `OR ${d.orden || orden} cargada — ${estadoTxt} · ${facturadoTxt} · ${cobroTxt}.`;
   ocultarResultados();
 }
