@@ -473,11 +473,12 @@ function procesarDatos(docs){
     }
     const mes = rec.fechaFact.slice(0,7);
     if (!mesesMap[mes]) {
-      mesesMap[mes] = { Mes: mes, Facturado:0, Conciliado:0, SinClasificar:0, Cobrado:0, Cantidad:0 };
+      mesesMap[mes] = { Mes: mes, Facturado:0, Conciliado:0, SinClasificar:0, Cobrado:0, CobradoFacturado:0, Cantidad:0 };
     }
     const cat = categoria(rec);
     mesesMap[mes][cat] += (rec.total || 0);
     if (rec.fechaCobro) mesesMap[mes].Cobrado += (rec.total || 0);
+    if (rec.fechaCobro && cat === 'Facturado') mesesMap[mes].CobradoFacturado += (rec.total || 0);
     mesesMap[mes].Cantidad += 1;
   });
 
@@ -624,7 +625,7 @@ function renderGraficoAnual(anio){
   const datosPorMes = NOMBRES_MES.map((nombre, i) => {
     const mesKey = `${anio}-${String(i+1).padStart(2,'0')}`;
     const encontrado = monthlyData.find(r => r.Mes === mesKey);
-    return { nombre, Facturado: encontrado ? encontrado.Facturado : 0, Cobrado: encontrado ? encontrado.Cobrado : 0 };
+    return { nombre, Facturado: encontrado ? encontrado.Facturado : 0, Cobrado: encontrado ? encontrado.CobradoFacturado : 0 };
   });
 
   const height = 320, padTop = 16, padBottom = 32, padLeft = 60, padRight = 20;
