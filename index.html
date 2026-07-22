@@ -1123,6 +1123,27 @@ function extraerItemsSeccionPDF(filas, idxInicio, idxFin, xColDetalleMax=360){
   return items;
 }
 
+// PDF.js a veces junta varias palabras en un solo bloque de texto (a diferencia
+// de como veniamos probando). Separamos cada bloque en palabras individuales,
+// repartiendo el ancho proporcionalmente segun la cantidad de caracteres.
+function dividirEnPalabrasPDF(it){
+  const texto = it.str;
+  if (!texto.trim()) return [];
+  const anchoTotal = (typeof it.width === 'number' && it.width > 0) ? it.width : texto.length * 5;
+  const totalChars = texto.length || 1;
+  const partes = texto.split(/(\s+)/); // conserva los separadores para medir proporciones
+  let cursorX = it.transform[4];
+  const resultado = [];
+  for (const parte of partes) {
+    const anchoParte = anchoTotal * (parte.length / totalChars);
+    if (parte.trim().length > 0) {
+      resultado.push({ text: parte.trim(), x: cursorX, y: it.transform[5] });
+    }
+    cursorX += anchoParte;
+  }
+  return resultado;
+}
+
 async function parsearPDFOrden(file){
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -1130,7 +1151,7 @@ async function parsearPDFOrden(file){
   const content = await page.getTextContent();
   const items = content.items
     .filter(it => it.str.trim().length > 0)
-    .map(it => ({ text: it.str.trim(), x: it.transform[4], y: it.transform[5] }));
+    .flatMap(dividirEnPalabrasPDF);
 
   const filas = agruparFilasPDF(items);
 
@@ -1143,8 +1164,8 @@ async function parsearPDFOrden(file){
   const idxCliente = buscarFilaConPDF(filas, 'Cliente:');
   if (idxCliente === null) throw new Error('No se encontró el formato esperado (falta "Cliente:"). ¿Es un PDF de orden de Cuper?');
   const filaCliente = filas[idxCliente];
-  const xDominioLabel = filaCliente.find(w => w.text === 'Dominio').x;
-  const xVehiculoLabel = filaCliente.find(w => w.text === 'Vehículo:').x;
+  const xDominioLabel = filaCliente.find(w => w.text.includes('Dominio')).x;
+  const xVehiculoLabel = filaCliente.find(w => w.text.includes('Vehículo')).x;
 
   const filaValores = filas[idxCliente+1];
   const cliente = filaValores.filter(w => w.x < xDominioLabel - 5).map(w=>w.text).join(' ').trim();
@@ -1161,7 +1182,7 @@ async function parsearPDFOrden(file){
   const fFinaliz = parsearFechaPDF(filaFechasVal[2] ? filaFechasVal[2].text : '');
 
   const idxDesc = buscarFilaConPDF(filas, 'Descripción del problema');
-  const xDesc = filas[idxDesc].find(w => w.text === 'Descripción').x;
+  const xDesc = filas[idxDesc].find(w => w.text.includes('Descripci')).x;
   const idxRepHeader = buscarFilaConPDF(filas, 'Repuestos ocupados');
   let descripcion = [];
   for (let i = idxDesc+1; i < idxRepHeader; i++){
