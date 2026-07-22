@@ -192,7 +192,7 @@
 
   <div class="tabs">
     <button class="tab-btn active" data-tab="dashboard">📊 Dashboard</button>
-    <button class="tab-btn" data-tab="carga">📝 Cargar OR</button>
+    <button class="tab-btn" data-tab="carga">📝 Cargar/Modificar OR</button>
     <button class="tab-btn" data-tab="usuarios">👤 Usuarios</button>
     <button class="tab-btn" data-tab="dominio">🔧 Historial por Dominio</button>
   </div>
@@ -320,7 +320,19 @@
         <div class="hint">Vacío = todavía no se facturó ni concilió</div>
 
         <label>Modo de pago</label>
-        <input type="text" id="condicion" placeholder="Ej: Cta. Cte. / Contado / Transf / T. Credito">
+        <select id="condicionSelect">
+          <option value="">— Sin especificar —</option>
+          <option value="Contado">Contado</option>
+          <option value="ContadoSF">ContadoSF</option>
+          <option value="Cta. Cte.">Cta. Cte.</option>
+          <option value="T. Credito">T. Crédito</option>
+          <option value="Transferencia">Transferencia</option>
+          <option value="Cheque">Cheque</option>
+          <option value="Derivado">Derivado</option>
+          <option value="SC">SC</option>
+          <option value="__otro__">Otro (escribir)</option>
+        </select>
+        <input type="text" id="condicion" placeholder="Escribí el modo de pago" style="display:none; margin-top:8px;">
 
         <div class="row2">
           <div>
@@ -407,8 +419,36 @@
 <script src="firebase-config.js"></script>
 <script>
 // ============== TABS ==============
+function limpiarPanelCarga(){
+  const pdfLogEl = document.getElementById('pdfLog');
+  if (pdfLogEl) pdfLogEl.innerHTML = '';
+  pdfArchivoSeleccionado = null;
+  const dropText = document.getElementById('pdfDropText');
+  if (dropText) {
+    dropText.innerHTML = '📄 Arrastrá el PDF acá, o <span style="color:var(--green); text-decoration:underline;">elegí un archivo</span>';
+    dropText.style.color = 'var(--text-dim)';
+  }
+  const pdfInputEl2 = document.getElementById('pdfInput');
+  if (pdfInputEl2) pdfInputEl2.value = '';
+  clearForm();
+}
+
+function limpiarPanelDominio(){
+  const buscar = document.getElementById('buscarDominio');
+  if (buscar) buscar.value = '';
+  const hint = document.getElementById('dominioHint');
+  if (hint) hint.textContent = '';
+  const cont = document.getElementById('resultadosDominio');
+  if (cont) cont.innerHTML = '';
+}
+
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
+    const anterior = document.querySelector('.tab-btn.active');
+    const tabAnterior = anterior ? anterior.dataset.tab : null;
+    if (tabAnterior === 'carga') limpiarPanelCarga();
+    if (tabAnterior === 'dominio') limpiarPanelDominio();
+
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-view').forEach(v => v.classList.remove('active'));
     btn.classList.add('active');
@@ -957,14 +997,23 @@ async function parsearPDFOrden(file){
 
   const idxCliente = buscarFilaConPDF(filas, 'Cliente:');
   if (idxCliente === null) throw new Error('No se encontró el formato esperado (falta "Cliente:"). ¿Es un PDF de orden de Cuper?');
+  const idxEntrega = buscarFilaConPDF(filas, 'Entrega:');
   const filaCliente = filas[idxCliente];
   const xDominioLabel = filaCliente.find(w => w.text.includes('Dominio')).x;
   const xVehiculoLabel = filaCliente.find(w => w.text.includes('Vehículo')).x;
 
-  const filaValores = filas[idxCliente+1];
-  const cliente = filaValores.filter(w => w.x < xDominioLabel - 5).map(w=>w.text).join(' ').trim();
-  const dominio = filaValores.filter(w => w.x >= xDominioLabel-5 && w.x < xVehiculoLabel-5).map(w=>w.text).join(' ').trim();
-  const vehiculo = filaValores.filter(w => w.x >= xVehiculoLabel-5).map(w=>w.text).join(' ').trim();
+  // Junta TODAS las palabras entre "Cliente:" y "Entrega:" (por si el nombre del
+  // cliente ocupa más de una línea) y las agrupa por columna según su posición X.
+  let banda = [];
+  for (let i = idxCliente; i < (idxEntrega !== null ? idxEntrega : idxCliente + 3); i++) {
+    banda = banda.concat(filas[i]);
+  }
+  function ordenarYUnir(ws){
+    return ws.slice().sort((a,b) => b.y - a.y || a.x - b.x).map(w => w.text).join(' ').trim();
+  }
+  const cliente = ordenarYUnir(banda.filter(w => w.x < xDominioLabel - 5 && w.text !== 'Cliente:'));
+  const dominio = ordenarYUnir(banda.filter(w => w.x >= xDominioLabel-5 && w.x < xVehiculoLabel-5 && !w.text.includes('Dominio')));
+  const vehiculo = ordenarYUnir(banda.filter(w => w.x >= xVehiculoLabel-5 && !w.text.includes('Vehículo')));
 
   const idxKm = buscarFilaConPDF(filas, 'Kilometros:');
   const km = idxKm !== null ? textoFila(filas[idxKm+1]).trim() : '';
@@ -1127,12 +1176,45 @@ function showStatus(msg, ok){
 function clearForm(){
   $('form').reset();
   if (window.__setFechaFact) window.__setFechaFact('');
+  if (window.setCondicionUI) setCondicionUI('');
   statusEl.className = 'status';
   $('buscarHint').textContent = '';
   $('btnBorrar').style.display = 'none';
   ocultarResultados();
 }
 $('btnNuevo').addEventListener('click', clearForm);
+
+// ============== MODO DE PAGO (desplegable + "otro") ==============
+const OPCIONES_CONDICION = ['Contado','ContadoSF','Cta. Cte.','T. Credito','Transferencia','Cheque','Derivado','SC'];
+function setCondicionUI(valor){
+  const select = $('condicionSelect');
+  const input = $('condicion');
+  if (!valor) {
+    select.value = '';
+    input.style.display = 'none';
+    input.value = '';
+  } else if (OPCIONES_CONDICION.includes(valor)) {
+    select.value = valor;
+    input.style.display = 'none';
+    input.value = valor;
+  } else {
+    select.value = '__otro__';
+    input.style.display = 'block';
+    input.value = valor;
+  }
+}
+$('condicionSelect').addEventListener('change', () => {
+  const v = $('condicionSelect').value;
+  if (v === '__otro__') {
+    $('condicion').style.display = 'block';
+    $('condicion').value = '';
+    $('condicion').focus();
+  } else {
+    $('condicion').style.display = 'none';
+    $('condicion').value = v;
+  }
+});
+
 // ============== SELECTOR VISUAL DE MES (Facturación/Conciliación) ==============
 (function(){
   const btn = document.getElementById('fechaFactBtn');
@@ -1220,7 +1302,7 @@ function cargarOrdenEnForm(orden, d){
   $('dominio').value = d.dominio || '';
   $('total').value = d.total || '';
   window.__setFechaFact(d.fechaFact || '');
-  $('condicion').value = d.condicion || '';
+  setCondicionUI(d.condicion || '');
   $('facNro').value = d.facNro || '';
   $('facSN').value = d.facSN || '';
   const fc = d.fechaCobro || '';
