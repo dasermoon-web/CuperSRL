@@ -1177,6 +1177,7 @@ function clearForm(){
   $('form').reset();
   if (window.__setFechaFact) window.__setFechaFact('');
   if (window.setCondicionUI) setCondicionUI('');
+  $('buscarOrden').value = '';
   statusEl.className = 'status';
   $('buscarHint').textContent = '';
   $('btnBorrar').style.display = 'none';
