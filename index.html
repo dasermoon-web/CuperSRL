@@ -7,6 +7,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
   :root{
     --bg: #16181a;
@@ -251,6 +252,18 @@
         <button type="button" class="btn secondary" id="btnLimpiarPaste">Limpiar</button>
       </div>
       <div id="pasteLog" style="margin-top:14px; font-family:var(--mono); font-size:12px; max-height:260px; overflow-y:auto;"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>Cargar desde PDF (orden cerrada)</h2></div>
+      <div class="panel-sub">
+        Subís el PDF de una orden ya cerrada y se completa sola: se guarda en "Historial por Dominio" (repuestos y mano de obra) y se crea/actualiza la OR en el dashboard de facturación (sin datos de factura todavía — eso lo completás después en "Ajuste puntual" cuando el cliente pague). Si volvés a subir el PDF de la misma orden, pisa los datos anteriores.
+      </div>
+      <input type="file" id="pdfInput" accept="application/pdf" style="margin-bottom:10px;">
+      <div class="actions">
+        <button type="button" class="btn" id="btnProcesarPDF">Procesar PDF</button>
+      </div>
+      <div id="pdfLog" style="margin-top:14px; font-family:var(--mono); font-size:12px; max-height:260px; overflow-y:auto;"></div>
     </div>
 
     <div class="panel">
@@ -1025,6 +1038,223 @@ document.getElementById('btnProcesar').addEventListener('click', async () => {
     logPaste('Error guardando: ' + err.message, 'err');
   }
   document.getElementById('btnProcesar').disabled = false;
+});
+
+// ============== CARGAR DESDE PDF ==============
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+function pdfLog(msg, cls){
+  const el = document.getElementById('pdfLog');
+  const line = document.createElement('div');
+  if (cls) line.style.color = cls === 'ok' ? 'var(--green)' : (cls === 'err' ? 'var(--warn)' : 'var(--text-dim)');
+  line.textContent = msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+// Agrupa los items de texto del PDF en "filas" por posicion Y (misma logica que usamos con el Excel)
+function agruparFilasPDF(items){
+  const filas = [];
+  const ordenados = items.slice().sort((a,b) => b.y - a.y); // de arriba hacia abajo (Y de PDF crece hacia arriba)
+  const TOLERANCIA = 3;
+  ordenados.forEach(it => {
+    let fila = filas.find(f => Math.abs(f[0].y - it.y) <= TOLERANCIA);
+    if (!fila) { fila = []; filas.push(fila); }
+    fila.push(it);
+  });
+  filas.forEach(f => f.sort((a,b) => a.x - b.x));
+  filas.sort((a,b) => b[0].y - a[0].y);
+  return filas;
+}
+
+function textoFila(fila){ return fila.map(w => w.text).join(' '); }
+
+function buscarFilaConPDF(filas, ...palabrasClave){
+  for (let i = 0; i < filas.length; i++){
+    const txt = textoFila(filas[i]);
+    if (palabrasClave.every(p => txt.includes(p))) return i;
+  }
+  return null;
+}
+
+function valorDerechaPDF(fila, xMin, tolerancia=0){
+  return fila.filter(w => w.x >= xMin - tolerancia).map(w => w.text).join(' ').trim();
+}
+
+function parsearFechaPDF(txt){
+  const m = (txt||'').match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : '';
+}
+
+function limpiarMontoPDF(txt){
+  if (!txt) return 0;
+  let t = txt.replace('$','').trim().replace(/\./g,'').replace(',', '.');
+  const n = parseFloat(t);
+  return isNaN(n) ? 0 : Math.round(n*100)/100;
+}
+
+function extraerItemsSeccionPDF(filas, idxInicio, idxFin, xColDetalleMax=360){
+  const items = [];
+  for (let i = idxInicio+1; i < idxFin; i++){
+    const fila = filas[i];
+    const detalleTokens = [];
+    const montos = [];
+    let k = 0;
+    while (k < fila.length){
+      const w = fila[k];
+      if (w.text === '$'){
+        if (k+1 < fila.length) montos.push(fila[k+1].text);
+        k += 2;
+        continue;
+      }
+      detalleTokens.push(w);
+      k++;
+    }
+    const detalleTxt = detalleTokens.filter(w => w.x < xColDetalleMax).map(w => w.text).join(' ').replace(/^_/, '').trim();
+    if (montos.length){
+      const totalVal = montos.length >= 2 ? montos[1] : montos[0];
+      const totalNum = limpiarMontoPDF(totalVal);
+      if (detalleTxt) items.push({ detalle: detalleTxt, total: totalNum });
+    } else {
+      const continuacion = detalleTokens.map(w => w.text).join(' ').trim();
+      if (continuacion && items.length) items[items.length-1].detalle += ' ' + continuacion;
+    }
+  }
+  return items;
+}
+
+async function parsearPDFOrden(file){
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const page = await pdf.getPage(1);
+  const content = await page.getTextContent();
+  const items = content.items
+    .filter(it => it.str.trim().length > 0)
+    .map(it => ({ text: it.str.trim(), x: it.transform[4], y: it.transform[5] }));
+
+  const filas = agruparFilasPDF(items);
+
+  let ordenCompleta = '';
+  for (const it of items) {
+    if (/^\d{3}-\d{5}$/.test(it.text)) { ordenCompleta = it.text; break; }
+  }
+  const orden = ordenCompleta ? ordenCompleta.split('-').pop() : '';
+
+  const idxCliente = buscarFilaConPDF(filas, 'Cliente:');
+  if (idxCliente === null) throw new Error('No se encontró el formato esperado (falta "Cliente:"). ¿Es un PDF de orden de Cuper?');
+  const filaCliente = filas[idxCliente];
+  const xDominioLabel = filaCliente.find(w => w.text === 'Dominio').x;
+  const xVehiculoLabel = filaCliente.find(w => w.text === 'Vehículo:').x;
+
+  const filaValores = filas[idxCliente+1];
+  const cliente = filaValores.filter(w => w.x < xDominioLabel - 5).map(w=>w.text).join(' ').trim();
+  const dominio = filaValores.filter(w => w.x >= xDominioLabel-5 && w.x < xVehiculoLabel-5).map(w=>w.text).join(' ').trim();
+  const vehiculo = filaValores.filter(w => w.x >= xVehiculoLabel-5).map(w=>w.text).join(' ').trim();
+
+  const idxKm = buscarFilaConPDF(filas, 'Kilometros:');
+  const km = idxKm !== null ? textoFila(filas[idxKm+1]).trim() : '';
+
+  const idxFechas = buscarFilaConPDF(filas, 'Recibido', 'Finaliz');
+  const filaFechasVal = filas[idxFechas+1];
+  const fRecibido = parsearFechaPDF(filaFechasVal[0] ? filaFechasVal[0].text : '');
+  const fCompromiso = parsearFechaPDF(filaFechasVal[1] ? filaFechasVal[1].text : '');
+  const fFinaliz = parsearFechaPDF(filaFechasVal[2] ? filaFechasVal[2].text : '');
+
+  const idxDesc = buscarFilaConPDF(filas, 'Descripción del problema');
+  const xDesc = filas[idxDesc].find(w => w.text === 'Descripción').x;
+  const idxRepHeader = buscarFilaConPDF(filas, 'Repuestos ocupados');
+  let descripcion = [];
+  for (let i = idxDesc+1; i < idxRepHeader; i++){
+    const txt = filas[i].filter(w => w.x >= xDesc - 10).map(w=>w.text).join(' ').replace(/^_/, '').trim();
+    if (txt && !txt.includes('Comentarios')) descripcion.push(txt);
+  }
+  descripcion = descripcion.join(' ');
+
+  const idxTotalRep = buscarFilaConPDF(filas, 'TOTAL', 'REPUESTOS');
+  const idxMOHeader = buscarFilaConPDF(filas, 'M.', 'obra/trab');
+  const idxTotalMO = buscarFilaConPDF(filas, 'TOTAL', 'MANO', 'DE', 'OBRA');
+
+  const repuestos = extraerItemsSeccionPDF(filas, idxRepHeader, idxTotalRep);
+  const manoDeObra = extraerItemsSeccionPDF(filas, idxMOHeader, idxTotalMO);
+
+  const totalRepMatch = filas[idxTotalRep].filter(w => w.x > 420 && w.text !== '$');
+  const totalRepuestos = limpiarMontoPDF(totalRepMatch.length ? totalRepMatch[totalRepMatch.length-1].text : '0');
+  const totalMOMatch = filas[idxTotalMO].filter(w => w.x > 420 && w.text !== '$');
+  const totalManoDeObra = limpiarMontoPDF(totalMOMatch.length ? totalMOMatch[totalMOMatch.length-1].text : '0');
+
+  const idxCostoTotalHeader = buscarFilaConPDF(filas, 'Costo Total');
+  let costoTotalCIVA = 0;
+  if (idxCostoTotalHeader !== null){
+    for (let i = idxCostoTotalHeader+1; i < Math.min(idxCostoTotalHeader+3, filas.length); i++){
+      const montos = filas[i].filter(w => w.text !== '$' && /^[\d.,]+$/.test(w.text));
+      if (montos.length){ costoTotalCIVA = limpiarMontoPDF(montos[montos.length-1].text); break; }
+    }
+  }
+  if (!costoTotalCIVA) costoTotalCIVA = Math.round((totalRepuestos + totalManoDeObra)*100)/100;
+
+  if (!orden) throw new Error('No se pudo detectar el número de Orden en el PDF.');
+
+  return {
+    orden, ordenCompleta,
+    dominio: dominio.toUpperCase().replace(/\s+/g,''),
+    cliente, vehiculo, km,
+    fechaRecibido: fRecibido, fechaCompromiso: fCompromiso, fechaFinalizacion: fFinaliz,
+    descripcionProblema: descripcion,
+    repuestos, totalRepuestos, manoDeObra, totalManoDeObra, costoTotalCIVA,
+  };
+}
+
+document.getElementById('btnProcesarPDF').addEventListener('click', async () => {
+  const input = document.getElementById('pdfInput');
+  const log = document.getElementById('pdfLog');
+  log.innerHTML = '';
+  const file = input.files[0];
+  if (!file) { pdfLog('Elegí un archivo PDF primero.', 'err'); return; }
+
+  document.getElementById('btnProcesarPDF').disabled = true;
+  try {
+    pdfLog('Leyendo PDF...');
+    const rep = await parsearPDFOrden(file);
+    pdfLog(`Detectado: OR ${rep.orden} — ${rep.cliente} — ${rep.vehiculo} (${rep.dominio})`);
+    pdfLog(`Repuestos: ${rep.repuestos.length} ítem(s) por ${fmtMoney(rep.totalRepuestos)} · Mano de obra: ${rep.manoDeObra.length} ítem(s) por ${fmtMoney(rep.totalManoDeObra)}`);
+    pdfLog(`Total C/IVA: ${fmtMoney(rep.costoTotalCIVA)}`);
+
+    // 1) Guardar en "reparaciones" (historial por dominio)
+    await db.collection('reparaciones').doc(rep.orden).set({
+      ...rep,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    // 2) Guardar/actualizar en "ordenes" (dashboard de facturación) — sin tocar datos de factura/cobro si ya existian
+    const refOrden = db.collection('ordenes').doc(rep.orden);
+    const existente = await refOrden.get();
+    const datosOrden = {
+      orden: rep.orden,
+      fechaCierre: rep.fechaFinalizacion || 'N',
+      fechaIng: rep.fechaRecibido || '',
+      razonSocial: rep.cliente,
+      vehiculo: rep.vehiculo,
+      dominio: rep.dominio,
+      total: rep.costoTotalCIVA,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    if (!existente.exists) {
+      // solo al crearla por primera vez, dejamos vacios los campos de facturacion
+      Object.assign(datosOrden, {
+        condicion: '', facNro: '', facSN: '', fechaFact: '',
+        fechaCobro: '', pendienteCobro: false, facturaImpaga: false,
+      });
+    }
+    await refOrden.set(datosOrden, { merge: true });
+
+    pdfLog(`✔ OR ${rep.orden} guardada en Historial y en Facturación.`, 'ok');
+    pdfLog('Recordá completar factura/cobro en "Ajuste puntual" cuando el cliente pague.', 'ok');
+    monthlyData = [];
+    input.value = '';
+  } catch (err) {
+    pdfLog('Error: ' + err.message, 'err');
+  }
+  document.getElementById('btnProcesarPDF').disabled = false;
 });
 
 // ============== AJUSTE PUNTUAL (formulario individual) ==============
