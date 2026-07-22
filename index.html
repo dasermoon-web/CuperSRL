@@ -193,6 +193,7 @@
     <button class="tab-btn active" data-tab="dashboard">📊 Dashboard</button>
     <button class="tab-btn" data-tab="carga">📝 Cargar OR</button>
     <button class="tab-btn" data-tab="usuarios">👤 Usuarios</button>
+    <button class="tab-btn" data-tab="dominio">🔧 Historial por Dominio</button>
   </div>
 
   <!-- ================= DASHBOARD ================= -->
@@ -223,7 +224,7 @@
           </div>
           <div class="legend-mini" style="margin-bottom:10px;">
             <span><span class="dot" style="background:var(--green)"></span>Facturado</span>
-            <span><span class="dot" style="background:var(--teal)"></span>Conciliado</span>
+            <span><span class="dot" style="background:var(--teal)"></span>Cobrado</span>
           </div>
           <div id="detalleChartScroll" style="overflow-x:auto;"></div>
         </div>
@@ -374,6 +375,21 @@
         Por seguridad, esto todavía no se puede hacer desde acá — evita que cualquiera que entre a la app pueda borrar el acceso de otro. Se hace en la consola de Firebase: <strong>Authentication → Users</strong>, buscás a la persona, ícono de tres puntos → <strong>"Disable account"</strong> (o borrarla directamente). Es cuestión de 2 clics.
       </div>
     </div>
+  </div>
+
+  <!-- ================= HISTORIAL POR DOMINIO ================= -->
+  <div class="tab-view" id="view-dominio">
+    <div class="panel">
+      <div class="panel-head"><h2>Buscar historial de reparaciones</h2></div>
+      <div class="panel-sub">Escribí la patente y buscá — te muestra todas las reparaciones registradas para ese vehículo.</div>
+      <div class="search-row">
+        <input type="text" id="buscarDominio" placeholder="Ej: AC563XH" style="text-transform:uppercase;">
+        <button class="btn secondary" id="btnBuscarDominio">Buscar</button>
+      </div>
+      <div class="hint" id="dominioHint"></div>
+    </div>
+
+    <div id="resultadosDominio"></div>
   </div>
 
 </div>
@@ -538,7 +554,7 @@ function mostrarDetalleKPI(tipo){
   if (tipo === 'detalleMensual') {
     tablaWrap.style.display = 'none';
     chartWrap.style.display = 'block';
-    document.getElementById('detalleKpiTitulo').textContent = 'Detalle mensual — Facturado vs. Conciliado';
+    document.getElementById('detalleKpiTitulo').textContent = 'Detalle mensual — Facturado vs. Cobrado';
     panel.style.display = 'block';
     prepararSelectorAnio();
     panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -608,7 +624,7 @@ function renderGraficoAnual(anio){
   const datosPorMes = NOMBRES_MES.map((nombre, i) => {
     const mesKey = `${anio}-${String(i+1).padStart(2,'0')}`;
     const encontrado = monthlyData.find(r => r.Mes === mesKey);
-    return { nombre, Facturado: encontrado ? encontrado.Facturado : 0, Conciliado: encontrado ? encontrado.Conciliado : 0 };
+    return { nombre, Facturado: encontrado ? encontrado.Facturado : 0, Cobrado: encontrado ? encontrado.Cobrado : 0 };
   });
 
   const height = 320, padTop = 16, padBottom = 32, padLeft = 60, padRight = 20;
@@ -619,7 +635,7 @@ function renderGraficoAnual(anio){
   const step = plotW / 12;
   const barW = Math.min(46, step * 0.55);
 
-  const maxVal = Math.max(1, ...datosPorMes.map(d => Math.max(d.Facturado, d.Conciliado)));
+  const maxVal = Math.max(1, ...datosPorMes.map(d => Math.max(d.Facturado, d.Cobrado)));
   const magnitude = Math.pow(10, Math.floor(Math.log10(maxVal)));
   const niceMax = Math.ceil(maxVal / (magnitude/2)) * (magnitude/2);
   const yScale = (v) => plotH - (v / niceMax) * plotH;
@@ -645,15 +661,15 @@ function renderGraficoAnual(anio){
     svg += `<text x="${xCentro}" y="${height-padBottom+16}" text-anchor="middle" font-family="monospace" font-size="10" fill="var(--text-dim)">${d.nombre}</text>`;
   });
 
-  // Línea: Conciliado, pasando por encima de las barras
+  // Línea: Cobrado, pasando por encima de las barras
   const puntos = datosPorMes.map((d, i) => {
-    const y = padTop + yScale(d.Conciliado);
+    const y = padTop + yScale(d.Cobrado);
     return `${centros[i]},${y}`;
   });
   svg += `<polyline points="${puntos.join(' ')}" fill="none" stroke="var(--teal)" stroke-width="2.5"></polyline>`;
   datosPorMes.forEach((d, i) => {
-    const y = padTop + yScale(d.Conciliado);
-    svg += `<circle cx="${centros[i]}" cy="${y}" r="4" fill="var(--teal)" stroke="var(--bg)" stroke-width="1.5"><title>${d.nombre}: Conciliado ${fmtMoney(d.Conciliado)}</title></circle>`;
+    const y = padTop + yScale(d.Cobrado);
+    svg += `<circle cx="${centros[i]}" cy="${y}" r="4" fill="var(--teal)" stroke="var(--bg)" stroke-width="1.5"><title>${d.nombre}: Cobrado ${fmtMoney(d.Cobrado)}</title></circle>`;
   });
 
   svg += `</svg>`;
@@ -1244,6 +1260,63 @@ $('btnBorrar').addEventListener('click', async () => {
     showStatus('Error al borrar: ' + err.message, false);
   }
   $('btnBorrar').disabled = false;
+});
+
+// ============== HISTORIAL POR DOMINIO ==============
+function fmtMoneyRep(n){ return '$' + Math.round(n||0).toLocaleString('es-AR'); }
+
+async function buscarHistorialDominio(){
+  const dominio = $('buscarDominio').value.trim().toUpperCase().replace(/\s+/g,'');
+  const hint = $('dominioHint');
+  const cont = document.getElementById('resultadosDominio');
+  if (!dominio) return;
+  hint.textContent = 'Buscando...';
+  cont.innerHTML = '';
+  try {
+    const snap = await db.collection('reparaciones').where('dominio', '==', dominio).get();
+    if (snap.empty) {
+      hint.textContent = `No hay reparaciones registradas para ${dominio}.`;
+      return;
+    }
+    const registros = snap.docs.map(d => d.data()).sort((a,b) => (a.fechaFinalizacion||'').localeCompare(b.fechaFinalizacion||''));
+    hint.textContent = `${registros.length} reparación(es) encontrada(s) para ${dominio}.`;
+
+    cont.innerHTML = registros.map(r => `
+      <div class="panel">
+        <div class="panel-head">
+          <h2>OR ${r.orden} — ${fmtISOaDDMMAA(r.fechaFinalizacion) || 'sin fecha'}</h2>
+          <div style="font-family:var(--mono); font-size:13px; color:var(--green);">${fmtMoneyRep(r.costoTotalCIVA)}</div>
+        </div>
+        <div class="panel-sub">
+          ${r.cliente || ''} · ${r.vehiculo || ''} ${r.km ? '· ' + r.km + ' km' : ''}
+        </div>
+        ${r.descripcionProblema ? `<div style="margin-bottom:14px; font-size:13px; color:var(--text-dim);"><strong style="color:var(--text);">Problema:</strong> ${r.descripcionProblema}</div>` : ''}
+
+        ${r.repuestos && r.repuestos.length ? `
+          <div style="margin-bottom:6px; font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--text-dim);">Repuestos (${fmtMoneyRep(r.totalRepuestos)})</div>
+          <table style="margin-bottom:14px;">
+            <tbody>
+              ${r.repuestos.map(rp => `<tr><td style="text-align:left;">${rp.detalle}</td><td>${fmtMoneyRep(rp.total)}</td></tr>`).join('')}
+            </tbody>
+          </table>` : ''}
+
+        ${r.manoDeObra && r.manoDeObra.length ? `
+          <div style="margin-bottom:6px; font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--text-dim);">Mano de obra (${fmtMoneyRep(r.totalManoDeObra)})</div>
+          <table>
+            <tbody>
+              ${r.manoDeObra.map(mo => `<tr><td style="text-align:left;">${mo.detalle}</td><td>${fmtMoneyRep(mo.total)}</td></tr>`).join('')}
+            </tbody>
+          </table>` : ''}
+      </div>
+    `).join('');
+  } catch (err) {
+    hint.textContent = 'Error buscando: ' + err.message;
+  }
+}
+
+$('btnBuscarDominio').addEventListener('click', buscarHistorialDominio);
+$('buscarDominio').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') buscarHistorialDominio();
 });
 </script>
 </body>
