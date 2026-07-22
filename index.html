@@ -224,9 +224,15 @@
           </div>
           <div class="legend-mini" style="margin-bottom:10px;">
             <span><span class="dot" style="background:var(--green)"></span>Facturado</span>
-            <span><span class="dot" style="background:var(--teal)"></span>Cobrado</span>
+            <span><span class="dot" style="background:rgb(0,0,225)"></span>Cobrado</span>
           </div>
           <div id="detalleChartScroll" style="overflow-x:auto;"></div>
+          <div style="max-height:340px; overflow-y:auto; margin-top:18px;">
+            <table>
+              <thead><tr><th>Mes</th><th>Facturado</th><th>Cobrado</th><th>Diferencia</th></tr></thead>
+              <tbody id="detalleAnioTablaBody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
@@ -667,15 +673,32 @@ function renderGraficoAnual(anio){
     const y = padTop + yScale(d.Cobrado);
     return `${centros[i]},${y}`;
   });
-  svg += `<polyline points="${puntos.join(' ')}" fill="none" stroke="var(--teal)" stroke-width="2.5"></polyline>`;
+  svg += `<polyline points="${puntos.join(' ')}" fill="none" stroke="rgb(0,0,225)" stroke-width="2.5"></polyline>`;
   datosPorMes.forEach((d, i) => {
     const y = padTop + yScale(d.Cobrado);
-    svg += `<circle cx="${centros[i]}" cy="${y}" r="4" fill="var(--teal)" stroke="var(--bg)" stroke-width="1.5"><title>${d.nombre}: Cobrado ${fmtMoney(d.Cobrado)}</title></circle>`;
+    const coincide = Math.abs(d.Facturado - d.Cobrado) < 1;
+    const colorPunto = coincide ? 'rgb(0,204,0)' : 'rgb(255,0,0)';
+    svg += `<circle cx="${centros[i]}" cy="${y}" r="4" fill="${colorPunto}" stroke="var(--bg)" stroke-width="1.5"><title>${d.nombre}: Cobrado ${fmtMoney(d.Cobrado)}</title></circle>`;
   });
 
   svg += `</svg>`;
   contenedor.innerHTML = svg;
+
+  // Tabla debajo del gráfico
+  const tbody = document.getElementById('detalleAnioTablaBody');
+  tbody.innerHTML = datosPorMes.map(d => {
+    const diferencia = round2(d.Facturado - d.Cobrado);
+    return `
+      <tr>
+        <td>${d.nombre} ${anio}</td>
+        <td>${fmtMoney(d.Facturado)}</td>
+        <td>${fmtMoney(d.Cobrado)}</td>
+        <td class="pend-cell ${diferencia > 0 ? '' : 'zero'}">${fmtMoney(diferencia)}</td>
+      </tr>
+    `;
+  }).join('');
 }
+function round2(n){ return Math.round(n * 100) / 100; }
 window.addEventListener('resize', () => {
   if (kpiActivo === 'detalleMensual') {
     const sel = document.getElementById('detalleAnioSelector');
