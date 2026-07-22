@@ -242,24 +242,14 @@
   <!-- ================= CARGA ================= -->
   <div class="tab-view" id="view-carga">
     <div class="panel">
-      <div class="panel-head"><h2>Pegar filas desde Excel</h2></div>
+      <div class="panel-head"><h2>Cargar orden desde PDF</h2></div>
       <div class="panel-sub">
-        En el Excel, seleccioná <strong>la fila de encabezados (donde dice Item, Fecha Cierre, Orden...) junto con las filas nuevas o modificadas</strong> que quieras cargar, y copiá todo junto con Ctrl+C. No importa qué columnas tengas ocultas ni en qué orden estén — el sistema busca los datos por el nombre de cada columna, no por su posición. Después pegá acá con Ctrl+V y tocá "Procesar".
+        Arrastrá el PDF de una orden ya cerrada, o elegilo con el botón. Se completa sola: se guarda en "Historial por Dominio" (repuestos y mano de obra) y se crea/actualiza la OR en el dashboard de facturación (sin datos de factura todavía — eso lo completás después en "Ajuste puntual" cuando el cliente pague). Si volvés a subir el PDF de la misma orden, pisa los datos anteriores.
       </div>
-      <textarea id="pasteArea" rows="8" style="width:100%; background:var(--panel-2); border:1px solid var(--line); color:var(--text); padding:10px 12px; border-radius:5px; font-family:var(--mono); font-size:12px;" placeholder="Pegá acá las filas copiadas de Excel..."></textarea>
-      <div class="actions">
-        <button type="button" class="btn" id="btnProcesar">Procesar y guardar</button>
-        <button type="button" class="btn secondary" id="btnLimpiarPaste">Limpiar</button>
+      <div id="pdfDropZone" style="border:2px dashed var(--line); border-radius:8px; padding:22px 16px; text-align:center; cursor:pointer; background:var(--panel-2); transition:border-color 0.15s, background 0.15s;">
+        <div id="pdfDropText" style="font-size:13px; color:var(--text-dim);">📄 Arrastrá el PDF acá, o <span style="color:var(--green); text-decoration:underline;">elegí un archivo</span></div>
+        <input type="file" id="pdfInput" accept="application/pdf" style="display:none;">
       </div>
-      <div id="pasteLog" style="margin-top:14px; font-family:var(--mono); font-size:12px; max-height:260px; overflow-y:auto;"></div>
-    </div>
-
-    <div class="panel">
-      <div class="panel-head"><h2>Cargar desde PDF (orden cerrada)</h2></div>
-      <div class="panel-sub">
-        Subís el PDF de una orden ya cerrada y se completa sola: se guarda en "Historial por Dominio" (repuestos y mano de obra) y se crea/actualiza la OR en el dashboard de facturación (sin datos de factura todavía — eso lo completás después en "Ajuste puntual" cuando el cliente pague). Si volvés a subir el PDF de la misma orden, pisa los datos anteriores.
-      </div>
-      <input type="file" id="pdfInput" accept="application/pdf" style="margin-bottom:10px;">
       <div class="actions">
         <button type="button" class="btn" id="btnProcesarPDF">Procesar PDF</button>
       </div>
@@ -844,202 +834,6 @@ document.getElementById('btnCrearUsuario').addEventListener('click', async () =>
 });
 
 
-// ============== PEGADO MASIVO DESDE EXCEL ==============
-function normalizarHeader(s){
-  return (s||'').toString()
-    .toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // saca acentos
-    .replace(/[^a-z0-9]/g, ''); // saca puntos, espacios, símbolos
-}
-
-// nombre normalizado de cada encabezado del Excel -> campo interno
-const MAPA_HEADERS = {
-  'fechacierre': 'fechaCierre',
-  'orden': 'orden',
-  'razonsocial': 'razonSocial',
-  'vehiculo': 'vehiculo',
-  'dominio': 'dominio',
-  'fechaing': 'fechaIng',
-  'totalciva': 'total',
-  'penfact': 'pendienteCobroRaw',  // columna O
-  'fechfact': 'fechaFact',
-  'condicion': 'condicion',   // modo de pago
-  'facn': 'facNro',       // "Fac. Nº"
-  'facno': 'facNro',
-  'facsn': 'facSN',
-  'faccanc': 'facCancRaw',
-};
-const CAMPOS_OBLIGATORIOS = ['orden'];
-
-function parseFechaCobro(v){
-  v = (v||'').toString().trim();
-  if (!v) return '';
-  const vu = v.toUpperCase();
-  if (vu === 'NO' || vu === 'N') return '';
-  if (vu === 'SI') return 'SI';
-  const iso = parseFechaISO(v);
-  return iso || v; // si no se puede parsear como fecha, se guarda el texto tal cual (para revisar)
-}
-function parseFacturaImpaga(v){
-  v = (v||'').toString().trim().toUpperCase();
-  return v === 'NO' || v === 'N';
-}
-function parseFechaCierre(v){
-  v = (v||'').trim();
-  if (!v || v.toUpperCase() === 'N') return 'N';
-  return parseFechaISO(v);
-}
-function parseFechaISO(v){
-  v = (v||'').trim();
-  if (!v) return '';
-  let m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-  m = v.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
-  if (m) {
-    const dd = m[1].padStart(2,'0'), mm = m[2].padStart(2,'0');
-    let yyyy = m[3];
-    if (yyyy.length === 2) yyyy = (parseInt(yyyy,10) < 50 ? '20' : '19') + yyyy;
-    return `${yyyy}-${mm}-${dd}`;
-  }
-  return '';
-}
-const MESES_ABR = {'ene':1,'feb':2,'mar':3,'abr':4,'may':5,'jun':6,'jul':7,'ago':8,'sep':9,'oct':10,'nov':11,'dic':12};
-function parseMesTextoOFecha(v){
-  v = (v||'').trim();
-  if (!v) return '';
-  const iso = parseFechaISO(v);
-  if (iso) return iso;
-  // formato "jul.-26", "jul-26", "jul.26", "oct.-25"...
-  const m = v.toLowerCase().match(/^([a-záéíóúñ]{3})\.?-?(\d{2,4})$/i);
-  if (m) {
-    const mes = MESES_ABR[m[1].slice(0,3)];
-    if (mes) {
-      let yyyy = m[2];
-      if (yyyy.length === 2) yyyy = (parseInt(yyyy,10) < 50 ? '20' : '19') + yyyy;
-      return `${yyyy}-${String(mes).padStart(2,'0')}-01`;
-    }
-  }
-  return '';
-}
-function parseNumeroAR(v){
-  v = (v||'').toString().trim();
-  if (!v) return 0;
-  v = v.replace(/[^0-9.,\-]/g, '');
-  if (v.includes(',')) {
-    v = v.replace(/\./g, '').replace(',', '.');
-  }
-  const n = parseFloat(v);
-  return isNaN(n) ? 0 : n;
-}
-function limpiaTxt(v){
-  v = (v||'').toString().trim();
-  return (v === '--' || v.toLowerCase() === 'nan') ? '' : v;
-}
-
-function parsearFilasPegadas(texto){
-  const lineas = texto.split(/\r?\n/).filter(l => l.trim().length > 0);
-  if (lineas.length < 2) {
-    return { registros: [], errores: ['Falta la fila de encabezados. Pegá también la fila con los nombres de columna (Item, Fecha Cierre, Orden...) arriba de los datos.'] };
-  }
-
-  const headerCols = lineas[0].split('\t').map(normalizarHeader);
-  const colIndex = {}; // campo interno -> índice de columna
-  headerCols.forEach((h, i) => {
-    const campo = MAPA_HEADERS[h];
-    if (campo && !(campo in colIndex)) colIndex[campo] = i;
-  });
-
-  const errores = [];
-  const faltantes = CAMPOS_OBLIGATORIOS.filter(c => !(c in colIndex));
-  if (faltantes.length > 0) {
-    errores.push(`No encontré la columna "Orden" en los encabezados pegados. Revisá que la primera fila pegada sea la de títulos del Excel.`);
-    return { registros: [], errores };
-  }
-
-  const registros = [];
-  for (let i = 1; i < lineas.length; i++) {
-    const cols = lineas[i].split('\t');
-    const get = (campo) => (campo in colIndex) ? (cols[colIndex[campo]] || '') : '';
-
-    const orden = limpiaTxt(get('orden'));
-    if (!orden) {
-      errores.push(`Línea ${i+1}: no tiene número de Orden. Se salteó.`);
-      continue;
-    }
-
-    registros.push({
-      orden: orden,
-      fechaCierre: parseFechaCierre(get('fechaCierre')),
-      razonSocial: limpiaTxt(get('razonSocial')),
-      vehiculo: limpiaTxt(get('vehiculo')),
-      dominio: limpiaTxt(get('dominio')),
-      fechaIng: parseFechaISO(get('fechaIng')),
-      total: parseNumeroAR(get('total')),
-      fechaFact: parseMesTextoOFecha(get('fechaFact')),
-      condicion: limpiaTxt(get('condicion')),
-      facNro: limpiaTxt(get('facNro')),
-      facSN: limpiaTxt(get('facSN')),
-      fechaCobro: parseFechaCobro(get('facCancRaw')),
-      facturaImpaga: parseFacturaImpaga(get('facCancRaw')),
-      pendienteCobro: limpiaTxt(get('pendienteCobroRaw')).toLowerCase() === 's',
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-  }
-  return { registros, errores };
-}
-
-function logPaste(msg, cls){
-  const el = document.getElementById('pasteLog');
-  const line = document.createElement('div');
-  if (cls) line.style.color = cls === 'ok' ? 'var(--green)' : (cls === 'err' ? 'var(--warn)' : 'var(--text-dim)');
-  line.textContent = msg;
-  el.appendChild(line);
-  el.scrollTop = el.scrollHeight;
-}
-
-document.getElementById('btnLimpiarPaste').addEventListener('click', () => {
-  document.getElementById('pasteArea').value = '';
-  document.getElementById('pasteLog').innerHTML = '';
-});
-
-document.getElementById('btnProcesar').addEventListener('click', async () => {
-  const texto = document.getElementById('pasteArea').value;
-  const log = document.getElementById('pasteLog');
-  log.innerHTML = '';
-  if (!texto.trim()) { logPaste('No hay nada pegado.', 'err'); return; }
-
-  const { registros, errores } = parsearFilasPegadas(texto);
-  errores.forEach(e => logPaste(e, 'err'));
-
-  if (registros.length === 0) {
-    logPaste('No se encontró ninguna fila válida para guardar.', 'err');
-    return;
-  }
-
-  logPaste(`Procesando ${registros.length} fila(s)...`);
-  document.getElementById('btnProcesar').disabled = true;
-  try {
-    const BATCH_SIZE = 400;
-    let done = 0;
-    for (let i = 0; i < registros.length; i += BATCH_SIZE) {
-      const chunk = registros.slice(i, i + BATCH_SIZE);
-      const batch = db.batch();
-      chunk.forEach(rec => {
-        const ref = db.collection('ordenes').doc(rec.orden);
-        batch.set(ref, rec, { merge: true });
-      });
-      await batch.commit();
-      done += chunk.length;
-    }
-    logPaste(`✔ ${done} OR guardadas correctamente: ${registros.map(r=>r.orden).join(', ')}`, 'ok');
-    monthlyData = []; // fuerza recarga del dashboard
-    document.getElementById('pasteArea').value = '';
-  } catch (err) {
-    logPaste('Error guardando: ' + err.message, 'err');
-  }
-  document.getElementById('btnProcesar').disabled = false;
-});
-
 // ============== CARGAR DESDE PDF ==============
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
@@ -1225,12 +1019,52 @@ async function parsearPDFOrden(file){
   };
 }
 
+// ============== ARRASTRAR Y SOLTAR PDF ==============
+let pdfArchivoSeleccionado = null;
+const pdfDropZone = document.getElementById('pdfDropZone');
+const pdfDropText = document.getElementById('pdfDropText');
+const pdfInputEl = document.getElementById('pdfInput');
+
+function setArchivoPDF(file){
+  if (!file) return;
+  if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+    pdfDropText.innerHTML = '⚠ Eso no es un PDF. Probá de nuevo.';
+    pdfDropText.style.color = 'var(--warn)';
+    pdfArchivoSeleccionado = null;
+    return;
+  }
+  pdfArchivoSeleccionado = file;
+  pdfDropText.innerHTML = `📄 <strong style="color:var(--text);">${file.name}</strong> listo para procesar`;
+  pdfDropText.style.color = 'var(--text-dim)';
+}
+
+pdfDropZone.addEventListener('click', () => pdfInputEl.click());
+pdfInputEl.addEventListener('change', () => setArchivoPDF(pdfInputEl.files[0]));
+
+['dragenter','dragover'].forEach(ev => {
+  pdfDropZone.addEventListener(ev, (e) => {
+    e.preventDefault(); e.stopPropagation();
+    pdfDropZone.style.borderColor = 'var(--green)';
+    pdfDropZone.style.background = 'var(--green-soft)';
+  });
+});
+['dragleave','drop'].forEach(ev => {
+  pdfDropZone.addEventListener(ev, (e) => {
+    e.preventDefault(); e.stopPropagation();
+    pdfDropZone.style.borderColor = 'var(--line)';
+    pdfDropZone.style.background = 'var(--panel-2)';
+  });
+});
+pdfDropZone.addEventListener('drop', (e) => {
+  const file = e.dataTransfer.files && e.dataTransfer.files[0];
+  setArchivoPDF(file);
+});
+
 document.getElementById('btnProcesarPDF').addEventListener('click', async () => {
-  const input = document.getElementById('pdfInput');
   const log = document.getElementById('pdfLog');
   log.innerHTML = '';
-  const file = input.files[0];
-  if (!file) { pdfLog('Elegí un archivo PDF primero.', 'err'); return; }
+  const file = pdfArchivoSeleccionado;
+  if (!file) { pdfLog('Elegí o arrastrá un archivo PDF primero.', 'err'); return; }
 
   document.getElementById('btnProcesarPDF').disabled = true;
   try {
@@ -1271,7 +1105,10 @@ document.getElementById('btnProcesarPDF').addEventListener('click', async () => 
     pdfLog(`✔ OR ${rep.orden} guardada en Historial y en Facturación.`, 'ok');
     pdfLog('Recordá completar factura/cobro en "Ajuste puntual" cuando el cliente pague.', 'ok');
     monthlyData = [];
-    input.value = '';
+    pdfArchivoSeleccionado = null;
+    pdfInputEl.value = '';
+    pdfDropText.innerHTML = '📄 Arrastrá el PDF acá, o <span style="color:var(--green); text-decoration:underline;">elegí un archivo</span>';
+    pdfDropText.style.color = 'var(--text-dim)';
   } catch (err) {
     pdfLog('Error: ' + err.message, 'err');
   }
