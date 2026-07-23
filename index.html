@@ -15,6 +15,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <style>
   :root{
     --bg: #16181a;
@@ -215,7 +216,10 @@
       <div class="panel" id="detalleKpiPanel" style="display:none;">
         <div class="panel-head">
           <h2 id="detalleKpiTitulo">Detalle</h2>
-          <button type="button" class="btn secondary" id="detalleKpiCerrar">Cerrar ✕</button>
+          <div style="display:flex; gap:8px;">
+            <button type="button" class="btn secondary" id="btnExportarExcel" style="display:none;">📥 Reporte</button>
+            <button type="button" class="btn secondary" id="detalleKpiCerrar">Cerrar ✕</button>
+          </div>
         </div>
 
         <div id="detalleKpiTablaWrap" style="max-height:420px; overflow-y:auto;">
@@ -593,6 +597,7 @@ let kpiActivo = null;
 function cerrarDetalleKPI(){
   kpiActivo = null;
   document.getElementById('detalleKpiPanel').style.display = 'none';
+  document.getElementById('btnExportarExcel').style.display = 'none';
   document.querySelectorAll('#kpi-row .kpi').forEach(el => el.style.outline = '');
 }
 document.getElementById('detalleKpiCerrar').addEventListener('click', cerrarDetalleKPI);
@@ -661,9 +666,117 @@ function mostrarDetalleKPI(tipo){
       `).join('')
     : '<tr><td colspan="5" style="text-align:center; color:var(--text-dim);">Sin registros</td></tr>';
 
+  // Exportar a Excel: solo disponible para estas dos tarjetas
+  const btnExport = document.getElementById('btnExportarExcel');
+  if (tipo === 'pendFacturacion' || tipo === 'facturasImpagas') {
+    exportData = { titulo, lista, fechaCol };
+    btnExport.style.display = 'inline-block';
+  } else {
+    exportData = null;
+    btnExport.style.display = 'none';
+  }
+
   panel.style.display = 'block';
   panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
+let exportData = null;
+
+document.getElementById('btnExportarExcel').addEventListener('click', async () => {
+  if (!exportData) return;
+  const btn = document.getElementById('btnExportarExcel');
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Generando...';
+  try {
+    const { titulo, lista, fechaCol } = exportData;
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Taller CuperSRL';
+    workbook.created = new Date();
+    const sheet = workbook.addWorksheet('Reporte', { views: [{ showGridLines: false }] });
+
+    // Logo (se reutiliza el que ya está cargado en la página, sin duplicar el base64)
+    const imgEl = document.querySelector('.brand img');
+    if (imgEl && imgEl.src.startsWith('data:image/png;base64,')) {
+      const base64 = imgEl.src.split(',')[1];
+      const imageId = workbook.addImage({ base64, extension: 'png' });
+      sheet.addImage(imageId, { tl: { col: 0.1, row: 0.2 }, ext: { width: 150, height: 62 } });
+    }
+    sheet.getRow(1).height = 26;
+    sheet.getRow(2).height = 26;
+    sheet.getRow(3).height = 10;
+
+    sheet.mergeCells('C1:F1');
+    sheet.getCell('C1').value = titulo;
+    sheet.getCell('C1').font = { size: 16, bold: true, color: { argb: 'FF1F4D37' } };
+
+    sheet.mergeCells('C2:F2');
+    sheet.getCell('C2').value = `Cuper SRL 4x4 Service — Generado el ${fmtFechaDDMMAA(new Date())}`;
+    sheet.getCell('C2').font = { size: 10, italic: true, color: { argb: 'FF6B6B6B' } };
+
+    const filaHeader = 5;
+    const encabezados = ['Orden', 'Cliente', 'Vehículo', 'Dominio', 'Fecha', 'Importe'];
+    sheet.getRow(filaHeader).values = encabezados;
+    sheet.getRow(filaHeader).eachCell(cell => {
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4D37' } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.border = { bottom: { style: 'thin', color: { argb: 'FF313A33' } } };
+    });
+
+    let filaActual = filaHeader + 1;
+    let total = 0;
+    lista.forEach(o => {
+      const fila = sheet.getRow(filaActual);
+      fila.values = [
+        o.orden,
+        o.razonSocial || '',
+        o.vehiculo || '',
+        o.dominio || '',
+        fmtISOaDDMMAA(fechaCol(o)),
+        o.total || 0,
+      ];
+      fila.getCell(6).numFmt = '$ #,##0';
+      fila.eachCell(cell => {
+        cell.border = { bottom: { style: 'hair', color: { argb: 'FFE0E0E0' } } };
+      });
+      total += (o.total || 0);
+      filaActual++;
+    });
+
+    // fila de total
+    const filaTotal = sheet.getRow(filaActual + 1);
+    filaTotal.getCell(5).value = 'TOTAL';
+    filaTotal.getCell(5).font = { bold: true };
+    filaTotal.getCell(5).alignment = { horizontal: 'right' };
+    filaTotal.getCell(6).value = total;
+    filaTotal.getCell(6).numFmt = '$ #,##0';
+    filaTotal.getCell(6).font = { bold: true, color: { argb: 'FF1F4D37' } };
+    filaTotal.eachCell(cell => {
+      cell.border = { top: { style: 'thin', color: { argb: 'FF1F4D37' } } };
+    });
+
+    sheet.columns = [
+      { width: 12 }, { width: 30 }, { width: 22 }, { width: 14 }, { width: 12 }, { width: 16 },
+    ];
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const nombreArchivo = titulo.replace(/[^\wÀ-ÿ]+/g, '_') + '.xlsx';
+    a.href = url;
+    a.download = nombreArchivo;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert('Error generando el Excel: ' + err.message);
+  }
+  btn.disabled = false;
+  btn.textContent = textoOriginal;
+});
 
 // ---------- Gráfico anual Facturado vs Conciliado ----------
 function prepararSelectorAnio(){
