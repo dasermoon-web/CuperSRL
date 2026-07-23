@@ -109,6 +109,10 @@
           log(`Importados ${done} / ${HISTORICO.length}...`);
         }
         log('✔ Importación completa.', 'ok');
+        await db.collection('meta').doc('estado').set(
+          { ultimaModificacion: firebase.firestore.FieldValue.serverTimestamp() },
+          { merge: true }
+        );
         log('Ya podés usar la app normalmente.', 'ok');
       } catch (err) {
         log('Error: ' + err.message, 'warn');

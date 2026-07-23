@@ -757,20 +757,67 @@ window.addEventListener('resize', () => {
 });
 
 let ultimaCargaFecha = null;
+const CACHE_KEY_DATOS = 'cuperCacheOrdenesDatos';
+const CACHE_KEY_SELLO = 'cuperCacheOrdenesSello';
 
-async function cargarDatos(){
+async function actualizarSelloModificacion(){
+  try {
+    await db.collection('meta').doc('estado').set(
+      { ultimaModificacion: firebase.firestore.FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+  } catch (err) {
+    console.warn('No se pudo actualizar el sello de modificación:', err.message);
+  }
+}
+
+function normalizarUpdatedAt(docs){
+  return docs.map(d => {
+    if (d.updatedAt && typeof d.updatedAt.toMillis === 'function') {
+      return { ...d, updatedAt: d.updatedAt.toMillis() };
+    }
+    return d;
+  });
+}
+
+function calcularUltimaCarga(docs){
+  ultimaCargaFecha = null;
+  docs.forEach(d => {
+    let dt = null;
+    if (d.updatedAt) {
+      if (typeof d.updatedAt.toDate === 'function') dt = d.updatedAt.toDate();
+      else if (typeof d.updatedAt === 'number') dt = new Date(d.updatedAt);
+    }
+    if (dt && (!ultimaCargaFecha || dt > ultimaCargaFecha)) ultimaCargaFecha = dt;
+  });
+}
+
+async function cargarDatos(forzar){
   document.getElementById('loadingMsg').style.display = 'block';
   document.getElementById('content').style.display = 'none';
   try {
-    const snap = await db.collection('ordenes').get();
-    const docs = snap.docs.map(d => d.data());
-    ultimaCargaFecha = null;
-    docs.forEach(d => {
-      if (d.updatedAt && typeof d.updatedAt.toDate === 'function') {
-        const dt = d.updatedAt.toDate();
-        if (!ultimaCargaFecha || dt > ultimaCargaFecha) ultimaCargaFecha = dt;
-      }
-    });
+    // 1) Leer el "sello" — 1 sola lectura, súper barata
+    const selloDoc = await db.collection('meta').doc('estado').get();
+    const selloRemoto = (selloDoc.exists && selloDoc.data().ultimaModificacion)
+      ? selloDoc.data().ultimaModificacion.toMillis() : 0;
+    const selloLocal = localStorage.getItem(CACHE_KEY_SELLO);
+    const cacheStr = localStorage.getItem(CACHE_KEY_DATOS);
+
+    let docs;
+    if (!forzar && selloLocal && cacheStr && Number(selloLocal) === selloRemoto) {
+      // Nada cambió desde la última vez: se usa lo que ya está guardado en este navegador
+      docs = JSON.parse(cacheStr);
+    } else {
+      // Cambió algo (o es la primera vez en este navegador): se trae todo de nuevo
+      const snap = await db.collection('ordenes').get();
+      docs = normalizarUpdatedAt(snap.docs.map(d => d.data()));
+      try {
+        localStorage.setItem(CACHE_KEY_DATOS, JSON.stringify(docs));
+        localStorage.setItem(CACHE_KEY_SELLO, String(selloRemoto));
+      } catch (e) { /* si el navegador no deja guardar, no pasa nada, sigue funcionando igual */ }
+    }
+
+    calcularUltimaCarga(docs);
     procesarDatos(docs);
     render();
   } catch (err) {
@@ -779,7 +826,7 @@ async function cargarDatos(){
       '<br><br>Revisá firebase-config.js y las reglas de Firestore.';
   }
 }
-document.getElementById('reloadBtn').addEventListener('click', cargarDatos);
+document.getElementById('reloadBtn').addEventListener('click', () => cargarDatos(true));
 
 // ============== LOGIN / SESIÓN ==============
 const loginScreen = document.getElementById('loginScreen');
@@ -1157,6 +1204,7 @@ document.getElementById('btnProcesarPDF').addEventListener('click', async () => 
       });
     }
     await refOrden.set(datosOrden, { merge: true });
+    await actualizarSelloModificacion();
 
     pdfLog(`✔ OR ${rep.orden} guardada en Historial y en Facturación.`, 'ok');
     pdfLog('Recordá completar factura/cobro en "Ajuste puntual" cuando el cliente pague.', 'ok');
@@ -1434,6 +1482,7 @@ $('form').addEventListener('submit', async (e) => {
   $('btnGuardar').disabled = true;
   try {
     await db.collection('ordenes').doc(orden).set(rec, { merge: true });
+    await actualizarSelloModificacion();
     monthlyData = []; // fuerza recarga del dashboard la próxima vez que se muestre
     clearForm();
     showStatus(`✔ OR ${orden} guardada correctamente. Formulario listo para la próxima búsqueda.`, true);
@@ -1455,6 +1504,7 @@ $('btnBorrar').addEventListener('click', async () => {
   $('btnBorrar').disabled = true;
   try {
     await db.collection('ordenes').doc(orden).delete();
+    await actualizarSelloModificacion();
     showStatus(`✔ OR ${orden} borrada.`, true);
     clearForm();
     monthlyData = [];
