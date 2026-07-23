@@ -711,7 +711,7 @@ document.getElementById('btnExportarExcel').addEventListener('click', async () =
     sheet.getCell('C1').font = { size: 16, bold: true, color: { argb: 'FF1F4D37' } };
 
     sheet.mergeCells('C2:F2');
-    sheet.getCell('C2').value = `Cuper SRL 4x4 Service — Generado el ${fmtFechaDDMMAA(new Date())}`;
+    sheet.getCell('C2').value = `Cuper SRL — Generado el ${fmtFechaDDMMAA(new Date())}`;
     sheet.getCell('C2').font = { size: 10, italic: true, color: { argb: 'FF6B6B6B' } };
 
     const filaHeader = 5;
@@ -1183,7 +1183,14 @@ async function parsearPDFOrden(file){
   const vehiculo = ordenarYUnir(banda.filter(w => w.x >= xVehiculoLabel-5 && !w.text.includes('Vehículo')));
 
   const idxKm = buscarFilaConPDF(filas, 'Kilometros:');
-  const km = idxKm !== null ? textoFila(filas[idxKm+1]).trim() : '';
+  let km = '';
+  if (idxKm !== null) {
+    const filaLabels = filas[idxKm];
+    const xKmLabel = filaLabels.find(w => w.text.includes('Kilometros')).x;
+    const domicilioLabel = filaLabels.find(w => w.text.includes('Domicilio'));
+    const xDomicilioLabel = domicilioLabel ? domicilioLabel.x : xKmLabel + 300;
+    km = filas[idxKm+1].filter(w => w.x >= xKmLabel-5 && w.x < xDomicilioLabel-5).map(w=>w.text).join(' ').trim();
+  }
 
   const idxFechas = buscarFilaConPDF(filas, 'Recibido', 'Finaliz');
   const filaFechasVal = filas[idxFechas+1];
@@ -1208,10 +1215,21 @@ async function parsearPDFOrden(file){
   const repuestos = extraerItemsSeccionPDF(filas, idxRepHeader, idxTotalRep);
   const manoDeObra = extraerItemsSeccionPDF(filas, idxMOHeader, idxTotalMO);
 
-  const totalRepMatch = filas[idxTotalRep].filter(w => w.x > 420 && w.text !== '$');
-  const totalRepuestos = limpiarMontoPDF(totalRepMatch.length ? totalRepMatch[totalRepMatch.length-1].text : '0');
-  const totalMOMatch = filas[idxTotalMO].filter(w => w.x > 420 && w.text !== '$');
-  const totalManoDeObra = limpiarMontoPDF(totalMOMatch.length ? totalMOMatch[totalMOMatch.length-1].text : '0');
+  function montoAncladoEnSigno(fila){
+    const montos = [];
+    let k = 0;
+    while (k < fila.length){
+      if (fila[k].text === '$' && k+1 < fila.length){
+        montos.push(fila[k+1].text);
+        k += 2;
+        continue;
+      }
+      k++;
+    }
+    return montos.length ? limpiarMontoPDF(montos[montos.length-1]) : 0;
+  }
+  const totalRepuestos = montoAncladoEnSigno(filas[idxTotalRep]);
+  const totalManoDeObra = montoAncladoEnSigno(filas[idxTotalMO]);
 
   const idxCostoTotalHeader = buscarFilaConPDF(filas, 'Costo Total');
   let costoTotalCIVA = 0;
