@@ -437,13 +437,21 @@
           </div>
         </div>
 
-        <label>Fecha de cobro</label>
-        <input type="date" id="cobFechaCobro">
-        <div class="hint">Vacío = todavía no se cobró</div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="cobCobradaSinFecha">
-          <label for="cobCobradaSinFecha">Cobrada, pero sin fecha exacta (equivale al "SI" del Excel)</label>
+        <label>Mes / año de cobro</label>
+        <div class="month-picker-wrap" style="position:relative;">
+          <button type="button" id="cobFechaCobroBtn" class="btn secondary" style="width:100%; text-align:left; font-weight:400;">Sin cobrar</button>
+          <input type="hidden" id="cobFechaCobro">
+          <div id="cobFechaCobroPanel" style="display:none; position:absolute; top:calc(100% + 4px); left:0; z-index:30; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:14px; width:260px; box-shadow:0 8px 24px rgba(0,0,0,0.4);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+              <button type="button" id="cobFechaCobroPrevYear" class="btn secondary" style="padding:4px 12px;">‹</button>
+              <span id="cobFechaCobroYearLabel" style="font-family:var(--mono); color:var(--green); font-size:15px;"></span>
+              <button type="button" id="cobFechaCobroNextYear" class="btn secondary" style="padding:4px 12px;">›</button>
+            </div>
+            <div id="cobFechaCobroMonthsGrid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:6px;"></div>
+            <button type="button" id="cobFechaCobroClear" class="btn secondary" style="width:100%; margin-top:12px;">Vaciar (no cobrado)</button>
+          </div>
         </div>
+        <div class="hint">Vacío = todavía no se cobró</div>
 
         <div class="checkbox-row">
           <input type="checkbox" id="cobPendienteCobro">
@@ -1125,6 +1133,12 @@ function valorDerechaPDF(fila, xMin, tolerancia=0){
 
 function parsearFechaPDF(txt){
   const m = (txt||'').match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  if (!m) return '';
+  if (m[3] === '1900') return ''; // fecha "vacía" típica de Excel = todavía no cargada
+  return `${m[3]}-${m[2]}-${m[1]}`;
+}
+function parsearFechaPDFSinFiltro(txt){
+  const m = (txt||'').match(/(\d{2})\/(\d{2})\/(\d{4})/);
   return m ? `${m[3]}-${m[2]}-${m[1]}` : '';
 }
 
@@ -1234,10 +1248,15 @@ async function parsearPDFOrden(file){
   }
 
   const idxFechas = buscarFilaConPDF(filas, 'Recibido', 'Finaliz');
-  const filaFechasVal = filas[idxFechas+1];
-  const fRecibido = parsearFechaPDF(filaFechasVal[0] ? filaFechasVal[0].text : '');
-  const fCompromiso = parsearFechaPDF(filaFechasVal[1] ? filaFechasVal[1].text : '');
-  const fFinaliz = parsearFechaPDF(filaFechasVal[2] ? filaFechasVal[2].text : '');
+  const filaFechasLabels = filas[idxFechas];
+  const xRecibidoLabel = filaFechasLabels.find(w => w.text.includes('Recibido')).x;
+  const xCompromisoLabel = filaFechasLabels.find(w => w.text.includes('compromiso')).x;
+  const xFinalizLabel = filaFechasLabels.find(w => w.text.includes('Finaliz')).x;
+  const filaFechasVal = filas[idxFechas+1] || [];
+  const textoEnColumna = (xDesde, xHasta) => filaFechasVal.filter(w => w.x >= xDesde-5 && (xHasta===null || w.x < xHasta-5)).map(w=>w.text).join(' ').trim();
+  const fRecibido = parsearFechaPDF(textoEnColumna(xRecibidoLabel, xCompromisoLabel));
+  const fCompromiso = parsearFechaPDFSinFiltro(textoEnColumna(xCompromisoLabel, xFinalizLabel));
+  const fFinaliz = parsearFechaPDF(textoEnColumna(xFinalizLabel, null));
 
   const idxDesc = buscarFilaConPDF(filas, 'Descripción del problema');
   const xDesc = filas[idxDesc].find(w => w.text.includes('Descripci')).x;
@@ -1446,7 +1465,8 @@ $('cobCondicionSelect').addEventListener('change', () => {
 });
 
 // ============== SELECTOR VISUAL DE MES (Facturación/Conciliación) — fábrica reutilizable ==============
-function crearSelectorMes(prefijo){
+function crearSelectorMes(prefijo, textoVacio){
+  textoVacio = textoVacio || 'Sin facturar / conciliar';
   const btn = document.getElementById(prefijo + 'Btn');
   const hidden = document.getElementById(prefijo);
   const panel = document.getElementById(prefijo + 'Panel');
@@ -1460,7 +1480,8 @@ function crearSelectorMes(prefijo){
   let viewYear = new Date().getFullYear();
 
   function renderLabel(){
-    if (!hidden.value) { btn.textContent = 'Sin facturar / conciliar'; return; }
+    if (!hidden.value) { btn.textContent = textoVacio; return; }
+    if (hidden.value === 'SI') { btn.textContent = 'Cobrada (dato viejo del Excel, sin mes) — tocá para elegir uno'; return; }
     const [y, m] = hidden.value.split('-');
     const yNum = parseInt(y, 10);
     const idx = parseInt(m, 10) - 1;
@@ -1483,7 +1504,7 @@ function crearSelectorMes(prefijo){
 
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
-    const parsedYear = hidden.value ? parseInt(hidden.value.split('-')[0], 10) : NaN;
+    const parsedYear = (hidden.value && hidden.value !== 'SI') ? parseInt(hidden.value.split('-')[0], 10) : NaN;
     viewYear = isNaN(parsedYear) ? new Date().getFullYear() : parsedYear;
     renderGrid();
     panel.style.display = (panel.style.display === 'none' || !panel.style.display) ? 'block' : 'none';
@@ -1508,17 +1529,12 @@ function crearSelectorMes(prefijo){
 
   renderLabel();
   return (valorISO) => {
-    hidden.value = valorISO ? valorISO.slice(0, 7) : '';
+    hidden.value = (valorISO && valorISO !== 'SI') ? valorISO.slice(0, 7) : (valorISO === 'SI' ? 'SI' : '');
     renderLabel();
   };
 }
-const setCobFechaFact = crearSelectorMes('cobFechaFact');
-
-$('cobCobradaSinFecha').addEventListener('change', () => {
-  const chk = $('cobCobradaSinFecha').checked;
-  $('cobFechaCobro').disabled = chk;
-  if (chk) $('cobFechaCobro').value = '';
-});
+const setCobFechaFact = crearSelectorMes('cobFechaFact', 'Sin facturar / conciliar');
+const setCobFechaCobro = crearSelectorMes('cobFechaCobro', 'Sin cobrar');
 
 function ocultarResultados(){
   resultadosEl.style.display = 'none';
@@ -1741,10 +1757,7 @@ function cargarOrdenEnCobForm(orden, d){
   setCobCondicionUI(d.condicion || '');
   $('cobFacNro').value = d.facNro || '';
   $('cobFacSN').value = d.facSN || '';
-  const fc = d.fechaCobro || '';
-  $('cobCobradaSinFecha').checked = (fc === 'SI');
-  $('cobFechaCobro').value = (fc && fc !== 'SI') ? fc : '';
-  $('cobFechaCobro').disabled = (fc === 'SI');
+  setCobFechaCobro(d.fechaCobro || '');
   $('cobPendienteCobro').checked = !!d.pendienteCobro;
   $('cobFacturaImpaga').checked = !!d.facturaImpaga;
 
@@ -1760,7 +1773,7 @@ function limpiarCobForm(){
   $('cobForm').reset();
   setCobFechaFact('');
   setCobCondicionUI('');
-  $('cobFechaCobro').disabled = false;
+  setCobFechaCobro('');
   $('cobFormPanel').style.display = 'none';
   $('cobBuscarHint').textContent = '';
   $('cobResultadosMultiples').innerHTML = '';
@@ -1837,7 +1850,7 @@ $('cobForm').addEventListener('submit', async (e) => {
     condicion: $('cobCondicion').value.trim(),
     facNro: $('cobFacNro').value.trim(),
     facSN: $('cobFacSN').value.trim(),
-    fechaCobro: $('cobCobradaSinFecha').checked ? 'SI' : ($('cobFechaCobro').value || ''),
+    fechaCobro: $('cobFechaCobro').value ? ($('cobFechaCobro').value === 'SI' ? 'SI' : $('cobFechaCobro').value + '-01') : '',
     pendienteCobro: $('cobPendienteCobro').checked,
     facturaImpaga: $('cobFacturaImpaga').checked,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
