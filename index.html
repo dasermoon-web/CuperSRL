@@ -373,16 +373,18 @@
       <div class="row2">
         <div>
           <label>Por Nº de Orden</label>
-          <div class="search-row">
+          <div class="search-row" style="position:relative;">
             <input type="text" id="cobBuscarOrden" placeholder="Ej: 01528" autocomplete="off">
             <button class="btn secondary" id="cobBtnBuscarOrden">Buscar</button>
+            <div id="cobResultadosOrden" style="display:none; position:absolute; top:100%; left:0; right:110px; background:var(--panel-2); border:1px solid var(--line); border-top:none; border-radius:0 0 6px 6px; max-height:260px; overflow-y:auto; z-index:20;"></div>
           </div>
         </div>
         <div>
           <label>Por Nº de Factura</label>
-          <div class="search-row">
+          <div class="search-row" style="position:relative;">
             <input type="text" id="cobBuscarFactura" placeholder="Ej: A01-01147" autocomplete="off">
             <button class="btn secondary" id="cobBtnBuscarFactura">Buscar</button>
+            <div id="cobResultadosFacturaLive" style="display:none; position:absolute; top:100%; left:0; right:110px; background:var(--panel-2); border:1px solid var(--line); border-top:none; border-radius:0 0 6px 6px; max-height:260px; overflow-y:auto; z-index:20;"></div>
           </div>
         </div>
       </div>
@@ -1613,7 +1615,11 @@ $('buscarOrden').addEventListener('focus', () => {
   if ($('buscarOrden').value.trim()) buscarPorPrefijo($('buscarOrden').value.trim());
 });
 document.addEventListener('click', (e) => {
-  if (!e.target.closest('.search-row')) ocultarResultados();
+  if (!e.target.closest('.search-row')) {
+    ocultarResultados();
+    ocultarCobResultadosOrden();
+    ocultarCobResultadosFactura();
+  }
 });
 
 $('btnBuscar').addEventListener('click', async () => {
@@ -1765,6 +1771,10 @@ function cargarOrdenEnCobForm(orden, d){
   $('cobFormSub').textContent = `${d.razonSocial || 'Sin cliente'} · ${d.vehiculo || ''} ${d.dominio ? '· ' + d.dominio : ''} · ${fmtMoney(d.total||0)}`;
   $('cobFormPanel').style.display = 'block';
   $('cobResultadosMultiples').innerHTML = '';
+  $('cobResultadosOrden').style.display = 'none';
+  $('cobResultadosOrden').innerHTML = '';
+  $('cobResultadosFacturaLive').style.display = 'none';
+  $('cobResultadosFacturaLive').innerHTML = '';
   $('cobFormPanel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
@@ -1779,6 +1789,10 @@ function limpiarCobForm(){
   $('cobResultadosMultiples').innerHTML = '';
   $('cobBuscarOrden').value = '';
   $('cobBuscarFactura').value = '';
+  $('cobResultadosOrden').style.display = 'none';
+  $('cobResultadosOrden').innerHTML = '';
+  $('cobResultadosFacturaLive').style.display = 'none';
+  $('cobResultadosFacturaLive').innerHTML = '';
 }
 $('cobBtnNuevo').addEventListener('click', limpiarCobForm);
 
@@ -1802,6 +1816,66 @@ async function cobBuscarPorOrden(){
 }
 $('cobBtnBuscarOrden').addEventListener('click', cobBuscarPorOrden);
 $('cobBuscarOrden').addEventListener('keydown', (e) => { if (e.key === 'Enter') cobBuscarPorOrden(); });
+
+// ---- Buscador en vivo por Nº de Orden (Cobranza) ----
+const cobResOrdenEl = $('cobResultadosOrden');
+function ocultarCobResultadosOrden(){ cobResOrdenEl.style.display = 'none'; cobResOrdenEl.innerHTML = ''; }
+
+async function cobBuscarPorPrefijoOrden(prefijo){
+  if (!prefijo) { ocultarCobResultadosOrden(); return; }
+  try {
+    const snap = await db.collection('ordenes')
+      .orderBy(firebase.firestore.FieldPath.documentId())
+      .startAt(prefijo)
+      .endAt(prefijo + '\uf8ff')
+      .limit(15)
+      .get();
+
+    if (snap.empty) {
+      cobResOrdenEl.innerHTML = `<div style="padding:10px 12px; color:var(--text-dim); font-size:13px;">No hay OR que empiecen con "${prefijo}".</div>`;
+      cobResOrdenEl.style.display = 'block';
+      return;
+    }
+
+    cobResOrdenEl.innerHTML = snap.docs.map(doc => {
+      const d = doc.data();
+      const facTxt = d.facNro ? `Fac. ${d.facNro}` : (d.facSN ? `Concilia: ${d.facSN}` : 'sin facturar');
+      return `
+        <div class="resultado-item" data-orden="${doc.id}" style="padding:9px 12px; cursor:pointer; border-bottom:1px solid var(--line); font-size:13px;">
+          <strong style="color:var(--green);">${doc.id}</strong> — ${d.razonSocial || 'sin cliente'}
+          <div style="font-size:11px; color:var(--text-dim);">${d.vehiculo || ''} ${d.dominio ? '· ' + d.dominio : ''} · ${facTxt}</div>
+        </div>`;
+    }).join('');
+    cobResOrdenEl.style.display = 'block';
+
+    cobResOrdenEl.querySelectorAll('.resultado-item').forEach(item => {
+      item.addEventListener('mouseenter', () => item.style.background = 'var(--green-soft)');
+      item.addEventListener('mouseleave', () => item.style.background = '');
+      item.addEventListener('click', async () => {
+        const orden = item.dataset.orden;
+        const doc = await db.collection('ordenes').doc(orden).get();
+        if (doc.exists) {
+          $('cobBuscarHint').textContent = '';
+          cargarOrdenEnCobForm(orden, doc.data());
+        }
+        ocultarCobResultadosOrden();
+      });
+    });
+  } catch (err) {
+    cobResOrdenEl.innerHTML = `<div style="padding:10px 12px; color:var(--warn); font-size:13px;">Error buscando: ${err.message}</div>`;
+    cobResOrdenEl.style.display = 'block';
+  }
+}
+
+let cobDebounceOrdenTimer = null;
+$('cobBuscarOrden').addEventListener('input', () => {
+  const v = $('cobBuscarOrden').value.trim();
+  clearTimeout(cobDebounceOrdenTimer);
+  cobDebounceOrdenTimer = setTimeout(() => cobBuscarPorPrefijoOrden(v), 250);
+});
+$('cobBuscarOrden').addEventListener('focus', () => {
+  if ($('cobBuscarOrden').value.trim()) cobBuscarPorPrefijoOrden($('cobBuscarOrden').value.trim());
+});
 
 async function cobBuscarPorFactura(){
   const factura = $('cobBuscarFactura').value.trim();
@@ -1840,6 +1914,65 @@ async function cobBuscarPorFactura(){
 }
 $('cobBtnBuscarFactura').addEventListener('click', cobBuscarPorFactura);
 $('cobBuscarFactura').addEventListener('keydown', (e) => { if (e.key === 'Enter') cobBuscarPorFactura(); });
+
+// ---- Buscador en vivo por Nº de Factura (Cobranza) ----
+const cobResFacturaEl = $('cobResultadosFacturaLive');
+function ocultarCobResultadosFactura(){ cobResFacturaEl.style.display = 'none'; cobResFacturaEl.innerHTML = ''; }
+
+async function cobBuscarPorPrefijoFactura(prefijo){
+  if (!prefijo) { ocultarCobResultadosFactura(); return; }
+  try {
+    const snap = await db.collection('ordenes')
+      .orderBy('facNro')
+      .startAt(prefijo)
+      .endAt(prefijo + '\uf8ff')
+      .limit(15)
+      .get();
+
+    if (snap.empty) {
+      cobResFacturaEl.innerHTML = `<div style="padding:10px 12px; color:var(--text-dim); font-size:13px;">No hay facturas que empiecen con "${prefijo}".</div>`;
+      cobResFacturaEl.style.display = 'block';
+      return;
+    }
+
+    cobResFacturaEl.innerHTML = snap.docs.map(doc => {
+      const d = doc.data();
+      return `
+        <div class="resultado-item" data-orden="${doc.id}" style="padding:9px 12px; cursor:pointer; border-bottom:1px solid var(--line); font-size:13px;">
+          <strong style="color:var(--green);">${d.facNro}</strong> — OR ${doc.id} · ${d.razonSocial || 'sin cliente'}
+          <div style="font-size:11px; color:var(--text-dim);">${d.vehiculo || ''} ${d.dominio ? '· ' + d.dominio : ''} · ${fmtMoney(d.total||0)}</div>
+        </div>`;
+    }).join('');
+    cobResFacturaEl.style.display = 'block';
+
+    cobResFacturaEl.querySelectorAll('.resultado-item').forEach(item => {
+      item.addEventListener('mouseenter', () => item.style.background = 'var(--green-soft)');
+      item.addEventListener('mouseleave', () => item.style.background = '');
+      item.addEventListener('click', async () => {
+        const orden = item.dataset.orden;
+        const doc = await db.collection('ordenes').doc(orden).get();
+        if (doc.exists) {
+          $('cobBuscarHint').textContent = '';
+          cargarOrdenEnCobForm(orden, doc.data());
+        }
+        ocultarCobResultadosFactura();
+      });
+    });
+  } catch (err) {
+    cobResFacturaEl.innerHTML = `<div style="padding:10px 12px; color:var(--warn); font-size:13px;">Error buscando: ${err.message}</div>`;
+    cobResFacturaEl.style.display = 'block';
+  }
+}
+
+let cobDebounceFacturaTimer = null;
+$('cobBuscarFactura').addEventListener('input', () => {
+  const v = $('cobBuscarFactura').value.trim();
+  clearTimeout(cobDebounceFacturaTimer);
+  cobDebounceFacturaTimer = setTimeout(() => cobBuscarPorPrefijoFactura(v), 250);
+});
+$('cobBuscarFactura').addEventListener('focus', () => {
+  if ($('cobBuscarFactura').value.trim()) cobBuscarPorPrefijoFactura($('cobBuscarFactura').value.trim());
+});
 
 $('cobForm').addEventListener('submit', async (e) => {
   e.preventDefault();
