@@ -203,6 +203,7 @@
     <button class="tab-btn" data-tab="carga">📝 Cargar/Modificar OR</button>
     <button class="tab-btn" data-tab="usuarios">👤 Usuarios</button>
     <button class="tab-btn" data-tab="dominio">🔧 Historial por Dominio</button>
+    <button class="tab-btn" data-tab="cobranza">💰 Cobranza</button>
   </div>
 
   <!-- ================= DASHBOARD ================= -->
@@ -314,66 +315,6 @@
           <input type="number" id="total" step="0.01" placeholder="Ej: 250000" style="padding-left:26px;">
         </div>
 
-        <label>Mes de facturación o conciliación</label>
-        <div class="month-picker-wrap" style="position:relative;">
-          <button type="button" id="fechaFactBtn" class="btn secondary" style="width:100%; text-align:left; font-weight:400;">Sin facturar / conciliar</button>
-          <input type="hidden" id="fechaFact">
-          <div id="fechaFactPanel" style="display:none; position:absolute; top:calc(100% + 4px); left:0; z-index:30; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:14px; width:260px; box-shadow:0 8px 24px rgba(0,0,0,0.4);">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-              <button type="button" id="fechaFactPrevYear" class="btn secondary" style="padding:4px 12px;">‹</button>
-              <span id="fechaFactYearLabel" style="font-family:var(--mono); color:var(--green); font-size:15px;"></span>
-              <button type="button" id="fechaFactNextYear" class="btn secondary" style="padding:4px 12px;">›</button>
-            </div>
-            <div id="fechaFactMonthsGrid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:6px;"></div>
-            <button type="button" id="fechaFactClear" class="btn secondary" style="width:100%; margin-top:12px;">Vaciar (no facturado)</button>
-          </div>
-        </div>
-        <div class="hint">Vacío = todavía no se facturó ni concilió</div>
-
-        <label>Modo de pago</label>
-        <select id="condicionSelect">
-          <option value="">— Sin especificar —</option>
-          <option value="Contado">Contado</option>
-          <option value="ContadoSF">ContadoSF</option>
-          <option value="Cta. Cte.">Cta. Cte.</option>
-          <option value="T. Credito">T. Crédito</option>
-          <option value="Transferencia">Transferencia</option>
-          <option value="Cheque">Cheque</option>
-          <option value="Derivado">Derivado</option>
-          <option value="SC">SC</option>
-          <option value="__otro__">Otro (escribir)</option>
-        </select>
-        <input type="text" id="condicion" placeholder="Escribí el modo de pago" style="display:none; margin-top:8px;">
-
-        <div class="row2">
-          <div>
-            <label>Nº de Factura</label>
-            <input type="text" id="facNro" placeholder="Ej: A09-00191 (vacío si no tiene)">
-          </div>
-          <div>
-            <label>Conciliación (sin factura)</label>
-            <input type="text" id="facSN" placeholder="Ej: SF / Concilia c/Freddy">
-          </div>
-        </div>
-
-        <label>Fecha de cobro</label>
-        <input type="date" id="fechaCobro">
-        <div class="hint">Vacío = todavía no se cobró</div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="cobradaSinFecha">
-          <label for="cobradaSinFecha">Cobrada, pero sin fecha exacta (equivale al "SI" del Excel)</label>
-        </div>
-
-        <div class="checkbox-row">
-          <input type="checkbox" id="pendienteCobro">
-          <label for="pendienteCobro">Marcar como "pendiente de facturación" (columna O del Excel)</label>
-        </div>
-
-        <div class="checkbox-row">
-          <input type="checkbox" id="facturaImpaga">
-          <label for="facturaImpaga">Factura pendiente de pago (columna AG = "NO")</label>
-        </div>
-
         <div class="actions">
           <button type="submit" class="btn" id="btnGuardar">Guardar</button>
           <button type="button" class="btn secondary" id="btnNuevo">Limpiar / nueva OR</button>
@@ -424,6 +365,105 @@
     <div id="resultadosDominio"></div>
   </div>
 
+  <!-- ================= COBRANZA ================= -->
+  <div class="tab-view" id="view-cobranza">
+    <div class="panel">
+      <div class="panel-head"><h2>Buscar orden para cobranza / facturación</h2></div>
+      <div class="panel-sub">Buscá por número de Orden o por número de Factura — lo que tengas más a mano.</div>
+      <div class="row2">
+        <div>
+          <label>Por Nº de Orden</label>
+          <div class="search-row">
+            <input type="text" id="cobBuscarOrden" placeholder="Ej: 01528" autocomplete="off">
+            <button class="btn secondary" id="cobBtnBuscarOrden">Buscar</button>
+          </div>
+        </div>
+        <div>
+          <label>Por Nº de Factura</label>
+          <div class="search-row">
+            <input type="text" id="cobBuscarFactura" placeholder="Ej: A01-01147" autocomplete="off">
+            <button class="btn secondary" id="cobBtnBuscarFactura">Buscar</button>
+          </div>
+        </div>
+      </div>
+      <div class="hint" id="cobBuscarHint"></div>
+      <div id="cobResultadosMultiples" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="panel" id="cobFormPanel" style="display:none;">
+      <div class="panel-head"><h2 id="cobFormTitulo">Orden</h2></div>
+      <div class="panel-sub" id="cobFormSub"></div>
+
+      <form id="cobForm">
+        <label>Mes de facturación o conciliación</label>
+        <div class="month-picker-wrap" style="position:relative;">
+          <button type="button" id="cobFechaFactBtn" class="btn secondary" style="width:100%; text-align:left; font-weight:400;">Sin facturar / conciliar</button>
+          <input type="hidden" id="cobFechaFact">
+          <div id="cobFechaFactPanel" style="display:none; position:absolute; top:calc(100% + 4px); left:0; z-index:30; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:14px; width:260px; box-shadow:0 8px 24px rgba(0,0,0,0.4);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+              <button type="button" id="cobFechaFactPrevYear" class="btn secondary" style="padding:4px 12px;">‹</button>
+              <span id="cobFechaFactYearLabel" style="font-family:var(--mono); color:var(--green); font-size:15px;"></span>
+              <button type="button" id="cobFechaFactNextYear" class="btn secondary" style="padding:4px 12px;">›</button>
+            </div>
+            <div id="cobFechaFactMonthsGrid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:6px;"></div>
+            <button type="button" id="cobFechaFactClear" class="btn secondary" style="width:100%; margin-top:12px;">Vaciar (no facturado)</button>
+          </div>
+        </div>
+        <div class="hint">Vacío = todavía no se facturó ni concilió</div>
+
+        <label>Modo de pago</label>
+        <select id="cobCondicionSelect">
+          <option value="">— Sin especificar —</option>
+          <option value="Contado">Contado</option>
+          <option value="ContadoSF">ContadoSF</option>
+          <option value="Cta. Cte.">Cta. Cte.</option>
+          <option value="T. Credito">T. Crédito</option>
+          <option value="Transferencia">Transferencia</option>
+          <option value="Cheque">Cheque</option>
+          <option value="Derivado">Derivado</option>
+          <option value="SC">SC</option>
+          <option value="__otro__">Otro (escribir)</option>
+        </select>
+        <input type="text" id="cobCondicion" placeholder="Escribí el modo de pago" style="display:none; margin-top:8px;">
+
+        <div class="row2">
+          <div>
+            <label>Nº de Factura</label>
+            <input type="text" id="cobFacNro" placeholder="Ej: A09-00191 (vacío si no tiene)">
+          </div>
+          <div>
+            <label>Conciliación (sin factura)</label>
+            <input type="text" id="cobFacSN" placeholder="Ej: SF / Concilia c/Freddy">
+          </div>
+        </div>
+
+        <label>Fecha de cobro</label>
+        <input type="date" id="cobFechaCobro">
+        <div class="hint">Vacío = todavía no se cobró</div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="cobCobradaSinFecha">
+          <label for="cobCobradaSinFecha">Cobrada, pero sin fecha exacta (equivale al "SI" del Excel)</label>
+        </div>
+
+        <div class="checkbox-row">
+          <input type="checkbox" id="cobPendienteCobro">
+          <label for="cobPendienteCobro">Marcar como "pendiente de facturación" (columna O del Excel)</label>
+        </div>
+
+        <div class="checkbox-row">
+          <input type="checkbox" id="cobFacturaImpaga">
+          <label for="cobFacturaImpaga">Factura pendiente de pago (columna AG = "NO")</label>
+        </div>
+
+        <div class="actions">
+          <button type="submit" class="btn" id="cobBtnGuardar">Guardar</button>
+          <button type="button" class="btn secondary" id="cobBtnNuevo">Limpiar</button>
+        </div>
+        <div class="status" id="cobStatus"></div>
+      </form>
+    </div>
+  </div>
+
 </div>
 
 
@@ -459,6 +499,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     const tabAnterior = anterior ? anterior.dataset.tab : null;
     if (tabAnterior === 'carga') limpiarPanelCarga();
     if (tabAnterior === 'dominio') limpiarPanelDominio();
+    if (tabAnterior === 'cobranza' && window.limpiarPanelCobranza) limpiarPanelCobranza();
 
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-view').forEach(v => v.classList.remove('active'));
@@ -1361,8 +1402,6 @@ function showStatus(msg, ok){
 }
 function clearForm(){
   $('form').reset();
-  if (window.__setFechaFact) window.__setFechaFact('');
-  if (window.setCondicionUI) setCondicionUI('');
   $('buscarOrden').value = '';
   statusEl.className = 'status';
   $('buscarHint').textContent = '';
@@ -1371,11 +1410,11 @@ function clearForm(){
 }
 $('btnNuevo').addEventListener('click', clearForm);
 
-// ============== MODO DE PAGO (desplegable + "otro") ==============
+// ============== MODO DE PAGO (desplegable + "otro") — pestaña Cobranza ==============
 const OPCIONES_CONDICION = ['Contado','ContadoSF','Cta. Cte.','T. Credito','Transferencia','Cheque','Derivado','SC'];
-function setCondicionUI(valor){
-  const select = $('condicionSelect');
-  const input = $('condicion');
+function setCobCondicionUI(valor){
+  const select = $('cobCondicionSelect');
+  const input = $('cobCondicion');
   if (!valor) {
     select.value = '';
     input.style.display = 'none';
@@ -1390,28 +1429,33 @@ function setCondicionUI(valor){
     input.value = valor;
   }
 }
-$('condicionSelect').addEventListener('change', () => {
-  const v = $('condicionSelect').value;
+$('cobCondicionSelect').addEventListener('change', () => {
+  const v = $('cobCondicionSelect').value;
   if (v === '__otro__') {
-    $('condicion').style.display = 'block';
-    $('condicion').value = '';
-    $('condicion').focus();
+    $('cobCondicion').style.display = 'block';
+    $('cobCondicion').value = '';
+    $('cobCondicion').focus();
   } else {
-    $('condicion').style.display = 'none';
-    $('condicion').value = v;
+    $('cobCondicion').style.display = 'none';
+    $('cobCondicion').value = v;
+  }
+  // Autocompletar "Conciliación (sin factura)" con "SF" cuando el modo de pago es ContadoSF
+  if (v === 'ContadoSF' && !$('cobFacSN').value.trim()) {
+    $('cobFacSN').value = 'SF';
   }
 });
 
-// ============== SELECTOR VISUAL DE MES (Facturación/Conciliación) ==============
-(function(){
-  const btn = document.getElementById('fechaFactBtn');
-  const hidden = document.getElementById('fechaFact');
-  const panel = document.getElementById('fechaFactPanel');
-  const yearLabel = document.getElementById('fechaFactYearLabel');
-  const grid = document.getElementById('fechaFactMonthsGrid');
-  const prevBtn = document.getElementById('fechaFactPrevYear');
-  const nextBtn = document.getElementById('fechaFactNextYear');
-  const clearBtn = document.getElementById('fechaFactClear');
+// ============== SELECTOR VISUAL DE MES (Facturación/Conciliación) — fábrica reutilizable ==============
+function crearSelectorMes(prefijo){
+  const btn = document.getElementById(prefijo + 'Btn');
+  const hidden = document.getElementById(prefijo);
+  const panel = document.getElementById(prefijo + 'Panel');
+  const yearLabel = document.getElementById(prefijo + 'YearLabel');
+  const grid = document.getElementById(prefijo + 'MonthsGrid');
+  const prevBtn = document.getElementById(prefijo + 'PrevYear');
+  const nextBtn = document.getElementById(prefijo + 'NextYear');
+  const clearBtn = document.getElementById(prefijo + 'Clear');
+  if (!btn || !hidden) return () => {};
   const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   let viewYear = new Date().getFullYear();
 
@@ -1463,16 +1507,17 @@ $('condicionSelect').addEventListener('change', () => {
   });
 
   renderLabel();
-  window.__setFechaFact = (valorISO) => {
+  return (valorISO) => {
     hidden.value = valorISO ? valorISO.slice(0, 7) : '';
     renderLabel();
   };
-})();
+}
+const setCobFechaFact = crearSelectorMes('cobFechaFact');
 
-$('cobradaSinFecha').addEventListener('change', () => {
-  const chk = $('cobradaSinFecha').checked;
-  $('fechaCobro').disabled = chk;
-  if (chk) $('fechaCobro').value = '';
+$('cobCobradaSinFecha').addEventListener('change', () => {
+  const chk = $('cobCobradaSinFecha').checked;
+  $('cobFechaCobro').disabled = chk;
+  if (chk) $('cobFechaCobro').value = '';
 });
 
 function ocultarResultados(){
@@ -1488,21 +1533,13 @@ function cargarOrdenEnForm(orden, d){
   $('vehiculo').value = d.vehiculo || '';
   $('dominio').value = d.dominio || '';
   $('total').value = d.total || '';
-  window.__setFechaFact(d.fechaFact || '');
-  setCondicionUI(d.condicion || '');
-  $('facNro').value = d.facNro || '';
-  $('facSN').value = d.facSN || '';
   const fc = d.fechaCobro || '';
-  $('cobradaSinFecha').checked = (fc === 'SI');
-  $('fechaCobro').value = (fc && fc !== 'SI') ? fc : '';
-  $('pendienteCobro').checked = !!d.pendienteCobro;
-  $('facturaImpaga').checked = !!d.facturaImpaga;
   const estaCerrada = d.fechaCierre && d.fechaCierre !== 'N';
   const estaFacturada = !!(d.facNro || d.facSN);
   const estadoTxt = estaCerrada ? `cerrada el ${fmtISOaDDMMAA(d.fechaCierre)}` : 'todavía ABIERTA';
   const facturadoTxt = estaFacturada ? 'facturada/conciliada' : 'sin facturar';
   const cobroTxt = fc === 'SI' ? 'cobrada (sin fecha)' : (fc ? `cobrada el ${fmtISOaDDMMAA(fc)}` : 'sin cobrar');
-  $('buscarHint').textContent = `OR ${d.orden || orden} cargada — ${estadoTxt} · ${facturadoTxt} · ${cobroTxt}.`;
+  $('buscarHint').innerHTML = `OR ${d.orden || orden} cargada — ${estadoTxt} · ${facturadoTxt} · ${cobroTxt}.<br><span style="color:var(--text-dim); font-size:12px;">Para tocar factura, modo de pago o cobro, usá la pestaña "💰 Cobranza".</span>`;
   $('btnBorrar').style.display = 'inline-block';
   ocultarResultados();
 }
@@ -1600,13 +1637,6 @@ $('form').addEventListener('submit', async (e) => {
     vehiculo: $('vehiculo').value.trim(),
     dominio: $('dominio').value.trim(),
     total: parseFloat($('total').value) || 0,
-    fechaFact: $('fechaFact').value ? $('fechaFact').value + '-01' : '',
-    condicion: $('condicion').value.trim(),
-    facNro: $('facNro').value.trim(),
-    facSN: $('facSN').value.trim(),
-    fechaCobro: $('cobradaSinFecha').checked ? 'SI' : ($('fechaCobro').value || ''),
-    pendienteCobro: $('pendienteCobro').checked,
-    facturaImpaga: $('facturaImpaga').checked,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
   };
 
@@ -1701,6 +1731,139 @@ $('btnBuscarDominio').addEventListener('click', buscarHistorialDominio);
 $('buscarDominio').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') buscarHistorialDominio();
 });
+
+// ============== COBRANZA ==============
+let cobOrdenActual = null;
+
+function cargarOrdenEnCobForm(orden, d){
+  cobOrdenActual = orden;
+  setCobFechaFact(d.fechaFact || '');
+  setCobCondicionUI(d.condicion || '');
+  $('cobFacNro').value = d.facNro || '';
+  $('cobFacSN').value = d.facSN || '';
+  const fc = d.fechaCobro || '';
+  $('cobCobradaSinFecha').checked = (fc === 'SI');
+  $('cobFechaCobro').value = (fc && fc !== 'SI') ? fc : '';
+  $('cobFechaCobro').disabled = (fc === 'SI');
+  $('cobPendienteCobro').checked = !!d.pendienteCobro;
+  $('cobFacturaImpaga').checked = !!d.facturaImpaga;
+
+  $('cobFormTitulo').textContent = `OR ${orden}`;
+  $('cobFormSub').textContent = `${d.razonSocial || 'Sin cliente'} · ${d.vehiculo || ''} ${d.dominio ? '· ' + d.dominio : ''} · ${fmtMoney(d.total||0)}`;
+  $('cobFormPanel').style.display = 'block';
+  $('cobResultadosMultiples').innerHTML = '';
+  $('cobFormPanel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function limpiarCobForm(){
+  cobOrdenActual = null;
+  $('cobForm').reset();
+  setCobFechaFact('');
+  setCobCondicionUI('');
+  $('cobFechaCobro').disabled = false;
+  $('cobFormPanel').style.display = 'none';
+  $('cobBuscarHint').textContent = '';
+  $('cobResultadosMultiples').innerHTML = '';
+  $('cobBuscarOrden').value = '';
+  $('cobBuscarFactura').value = '';
+}
+$('cobBtnNuevo').addEventListener('click', limpiarCobForm);
+
+async function cobBuscarPorOrden(){
+  const orden = $('cobBuscarOrden').value.trim();
+  if (!orden) return;
+  $('cobBuscarHint').textContent = 'Buscando...';
+  $('cobResultadosMultiples').innerHTML = '';
+  try {
+    const doc = await db.collection('ordenes').doc(orden).get();
+    if (!doc.exists) {
+      $('cobBuscarHint').textContent = `No existe ninguna OR con el número "${orden}".`;
+      $('cobFormPanel').style.display = 'none';
+      return;
+    }
+    $('cobBuscarHint').textContent = '';
+    cargarOrdenEnCobForm(orden, doc.data());
+  } catch (err) {
+    $('cobBuscarHint').textContent = 'Error buscando: ' + err.message;
+  }
+}
+$('cobBtnBuscarOrden').addEventListener('click', cobBuscarPorOrden);
+$('cobBuscarOrden').addEventListener('keydown', (e) => { if (e.key === 'Enter') cobBuscarPorOrden(); });
+
+async function cobBuscarPorFactura(){
+  const factura = $('cobBuscarFactura').value.trim();
+  if (!factura) return;
+  $('cobBuscarHint').textContent = 'Buscando...';
+  $('cobResultadosMultiples').innerHTML = '';
+  try {
+    const snap = await db.collection('ordenes').where('facNro', '==', factura).get();
+    if (snap.empty) {
+      $('cobBuscarHint').textContent = `No se encontró ninguna OR con la factura "${factura}".`;
+      $('cobFormPanel').style.display = 'none';
+      return;
+    }
+    if (snap.docs.length === 1) {
+      $('cobBuscarHint').textContent = '';
+      cargarOrdenEnCobForm(snap.docs[0].id, snap.docs[0].data());
+      return;
+    }
+    // más de una OR con la misma factura: mostrar para elegir
+    $('cobBuscarHint').textContent = `${snap.docs.length} órdenes encontradas con esa factura — elegí una:`;
+    $('cobResultadosMultiples').innerHTML = snap.docs.map(doc => {
+      const d = doc.data();
+      return `<div class="search-item" data-orden="${doc.id}" style="padding:10px 12px; border:1px solid var(--line); border-radius:6px; margin-bottom:6px; cursor:pointer;">
+        <strong>${doc.id}</strong> — ${d.razonSocial || ''} · ${d.vehiculo || ''} · ${fmtMoney(d.total||0)}
+      </div>`;
+    }).join('');
+    $('cobResultadosMultiples').querySelectorAll('[data-orden]').forEach(el => {
+      el.addEventListener('click', async () => {
+        const doc = await db.collection('ordenes').doc(el.dataset.orden).get();
+        if (doc.exists) cargarOrdenEnCobForm(doc.id, doc.data());
+      });
+    });
+  } catch (err) {
+    $('cobBuscarHint').textContent = 'Error buscando: ' + err.message;
+  }
+}
+$('cobBtnBuscarFactura').addEventListener('click', cobBuscarPorFactura);
+$('cobBuscarFactura').addEventListener('keydown', (e) => { if (e.key === 'Enter') cobBuscarPorFactura(); });
+
+$('cobForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!cobOrdenActual) return;
+
+  const rec = {
+    fechaFact: $('cobFechaFact').value ? $('cobFechaFact').value + '-01' : '',
+    condicion: $('cobCondicion').value.trim(),
+    facNro: $('cobFacNro').value.trim(),
+    facSN: $('cobFacSN').value.trim(),
+    fechaCobro: $('cobCobradaSinFecha').checked ? 'SI' : ($('cobFechaCobro').value || ''),
+    pendienteCobro: $('cobPendienteCobro').checked,
+    facturaImpaga: $('cobFacturaImpaga').checked,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+
+  $('cobBtnGuardar').disabled = true;
+  try {
+    await db.collection('ordenes').doc(cobOrdenActual).set(rec, { merge: true });
+    await actualizarSelloModificacion();
+    monthlyData = [];
+    const ordenGuardada = cobOrdenActual;
+    limpiarCobForm();
+    $('cobStatus').className = 'status ok';
+    $('cobStatus').textContent = `✔ OR ${ordenGuardada} actualizada correctamente.`;
+  } catch (err) {
+    $('cobStatus').className = 'status err';
+    $('cobStatus').textContent = 'Error al guardar: ' + err.message;
+  }
+  $('cobBtnGuardar').disabled = false;
+});
+
+function limpiarPanelCobranza(){
+  limpiarCobForm();
+  $('cobStatus').className = 'status';
+  $('cobStatus').textContent = '';
+}
 
 // ============== PWA: registrar service worker (para poder "Instalar app") ==============
 if ('serviceWorker' in navigator) {
