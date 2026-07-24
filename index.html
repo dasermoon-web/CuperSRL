@@ -557,6 +557,7 @@ let openOrders = [];
 let pendientesFacturar = [];
 let pendientesCobroMarcados = [];
 let facturasImpagas = [];
+let cobradasEsteMes = [];
 let todosLosDocs = [];
 
 function categoria(rec){
@@ -622,6 +623,11 @@ function renderKPIs(){
   const totalPendFacturacion = pendientesCobroMarcados.reduce((a,r)=>a + (r.total||0), 0);
   const totalFacturasImpagas = facturasImpagas.reduce((a,r)=>a + (r.total||0), 0);
 
+  const hoy = new Date();
+  const mesActualStr = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`;
+  cobradasEsteMes = todosLosDocs.filter(rec => rec.fechaCobro && rec.fechaCobro !== 'SI' && rec.fechaCobro.slice(0,7) === mesActualStr && rec.total);
+  const totalCobradasEsteMes = cobradasEsteMes.reduce((a,r)=>a + (r.total||0), 0);
+
   const kpiRow = document.getElementById('kpi-row');
   const kpis = [
     { tipo: 'detalleMensual', label: 'Detalle mensual', value: '📊 Ver', cls:'' },
@@ -629,6 +635,7 @@ function renderKPIs(){
     { tipo: 'conciliado', label: `Conciliado — ${monthLabel(last.Mes)}`, value: fmtMoney(last.Conciliado), cls:'' },
     { tipo: 'pendFacturacion', label: 'Pendiente de facturación', value: fmtMoney(totalPendFacturacion), cls: totalPendFacturacion>0 ? 'warn':'ok' },
     { tipo: 'facturasImpagas', label: 'Facturas pendientes de pago', value: fmtMoney(totalFacturasImpagas), cls: totalFacturasImpagas>0 ? 'warn':'ok' },
+    { tipo: 'cobradasMes', label: 'Facturas cobradas en el mes', value: fmtMoney(totalCobradasEsteMes), cls:'ok' },
     { tipo: 'abiertas', label: 'Órdenes abiertas ahora', value: openOrders.length, cls:'warn' },
   ];
   kpiRow.innerHTML = kpis.map(k => `
@@ -696,6 +703,10 @@ function mostrarDetalleKPI(tipo){
   } else if (tipo === 'facturasImpagas') {
     lista = facturasImpagas;
     titulo = 'Facturas pendientes de pago';
+  } else if (tipo === 'cobradasMes') {
+    lista = cobradasEsteMes;
+    titulo = 'Facturas cobradas en el mes';
+    fechaCol = (o) => o.fechaCobro;
   } else if (tipo === 'pendFacturar') {
     lista = pendientesFacturar;
     titulo = 'Pendiente de facturar / conciliar';
