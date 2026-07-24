@@ -225,7 +225,7 @@
 
         <div id="detalleKpiTablaWrap" style="max-height:420px; overflow-y:auto;">
           <table>
-            <thead><tr><th>Orden</th><th style="text-align:left;">Cliente</th><th style="text-align:left;">Vehículo</th><th>Fecha</th><th>Importe</th></tr></thead>
+            <thead id="detalleKpiThead"><tr><th>Orden</th><th style="text-align:left;">Cliente</th><th style="text-align:left;">Vehículo</th><th>Fecha</th><th>Importe</th></tr></thead>
             <tbody id="detalleKpiBody"></tbody>
           </table>
         </div>
@@ -716,17 +716,36 @@ function mostrarDetalleKPI(tipo){
   }
 
   document.getElementById('detalleKpiTitulo').textContent = `${titulo} (${lista.length})`;
-  document.getElementById('detalleKpiBody').innerHTML = lista.length
-    ? lista.map(o => `
-        <tr>
-          <td>${o.orden}</td>
-          <td style="text-align:left;">${o.razonSocial || ''}</td>
-          <td style="text-align:left;">${o.vehiculo || ''} ${o.dominio ? '· ' + o.dominio : ''}</td>
-          <td>${fmtISOaDDMMAA(fechaCol(o))}</td>
-          <td>${fmtMoney(o.total||0)}</td>
-        </tr>
-      `).join('')
-    : '<tr><td colspan="5" style="text-align:center; color:var(--text-dim);">Sin registros</td></tr>';
+
+  const theadEl = document.getElementById('detalleKpiThead');
+  if (tipo === 'cobradasMes') {
+    theadEl.innerHTML = '<tr><th>Orden</th><th style="text-align:left;">Cliente</th><th style="text-align:left;">Vehículo</th><th>Factura</th><th>Modo de pago</th><th>Importe</th></tr>';
+    document.getElementById('detalleKpiBody').innerHTML = lista.length
+      ? lista.map(o => `
+          <tr>
+            <td>${o.orden}</td>
+            <td style="text-align:left;">${o.razonSocial || ''}</td>
+            <td style="text-align:left;">${o.vehiculo || ''} ${o.dominio ? '· ' + o.dominio : ''}</td>
+            <td>${o.facNro || (o.facSN ? o.facSN : '')}</td>
+            <td>${o.condicion || ''}</td>
+            <td>${fmtMoney(o.total||0)}</td>
+          </tr>
+        `).join('')
+      : '<tr><td colspan="6" style="text-align:center; color:var(--text-dim);">Sin registros</td></tr>';
+  } else {
+    theadEl.innerHTML = '<tr><th>Orden</th><th style="text-align:left;">Cliente</th><th style="text-align:left;">Vehículo</th><th>Fecha</th><th>Importe</th></tr>';
+    document.getElementById('detalleKpiBody').innerHTML = lista.length
+      ? lista.map(o => `
+          <tr>
+            <td>${o.orden}</td>
+            <td style="text-align:left;">${o.razonSocial || ''}</td>
+            <td style="text-align:left;">${o.vehiculo || ''} ${o.dominio ? '· ' + o.dominio : ''}</td>
+            <td>${fmtISOaDDMMAA(fechaCol(o))}</td>
+            <td>${fmtMoney(o.total||0)}</td>
+          </tr>
+        `).join('')
+      : '<tr><td colspan="5" style="text-align:center; color:var(--text-dim);">Sin registros</td></tr>';
+  }
 
   // Exportar a Excel: solo disponible para estas dos tarjetas
   const btnExport = document.getElementById('btnExportarExcel');
