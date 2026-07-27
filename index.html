@@ -73,12 +73,41 @@
   #loadingMsg{ text-align:center; padding:60px 0; color:var(--text-dim); font-family:var(--mono); }
 
   .kpis{ display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:14px; margin-bottom:28px; }
-  .kpi{ background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--green); border-radius:6px; padding:16px 18px; }
-  .kpi.warn{border-left-color:var(--warn);}
-  .kpi.ok{border-left-color:var(--green);}
-  .kpi .label{ font-size:11px; text-transform:uppercase; letter-spacing:1.5px; color:var(--text-dim); margin-bottom:8px; }
-  .kpi .value{ font-family:var(--mono); font-size:24px; font-weight:700; line-height:1.1; }
-  .kpi .sub{ font-size:12px; color:var(--text-dim); margin-top:6px; }
+  .kpi{
+    position:relative; background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:18px 18px 16px; cursor:pointer; transition:transform .15s ease, box-shadow .15s ease;
+  }
+  .kpi:hover{ transform:translateY(-2px); }
+  .kpi .icon{ width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-bottom:12px; }
+  .kpi .icon svg{ width:20px; height:20px; }
+  .kpi .label{ font-size:11px; text-transform:uppercase; letter-spacing:1.5px; margin-bottom:8px; font-weight:700; }
+  .kpi .value{ font-family:var(--mono); font-size:26px; font-weight:800; line-height:1.1; margin-bottom:6px; }
+  .kpi .sub{ font-size:12px; color:var(--text-dim); }
+
+  .kpi.c-red{ border-color:rgba(255,92,92,.35); background:radial-gradient(120% 120% at 18% 0%, rgba(255,92,92,.12), var(--panel) 65%); }
+  .kpi.c-red .icon{ color:#ff5c5c; background:rgba(255,92,92,.14); }
+  .kpi.c-red .label{ color:#ff8f8f; }
+  .kpi.c-red .value{ color:#ff5c5c; }
+
+  .kpi.c-green{ border-color:rgba(61,220,151,.35); background:radial-gradient(120% 120% at 18% 0%, rgba(61,220,151,.12), var(--panel) 65%); }
+  .kpi.c-green .icon{ color:#3ddc97; background:rgba(61,220,151,.14); }
+  .kpi.c-green .label{ color:#7bebbe; }
+  .kpi.c-green .value{ color:#3ddc97; }
+
+  .kpi.c-yellow{ border-color:rgba(247,201,72,.35); background:radial-gradient(120% 120% at 18% 0%, rgba(247,201,72,.12), var(--panel) 65%); }
+  .kpi.c-yellow .icon{ color:#f7c948; background:rgba(247,201,72,.14); }
+  .kpi.c-yellow .label{ color:#f9dc88; }
+  .kpi.c-yellow .value{ color:#f7c948; }
+
+  .kpi.c-blue{ border-color:rgba(91,157,255,.35); background:radial-gradient(120% 120% at 18% 0%, rgba(91,157,255,.12), var(--panel) 65%); }
+  .kpi.c-blue .icon{ color:#5b9dff; background:rgba(91,157,255,.14); }
+  .kpi.c-blue .label{ color:#9dc2ff; }
+  .kpi.c-blue .value{ color:#5b9dff; }
+
+  .kpi.c-teal{ border-color:rgba(79,216,201,.35); background:radial-gradient(120% 120% at 18% 0%, rgba(79,216,201,.12), var(--panel) 65%); }
+  .kpi.c-teal .icon{ color:#4fd8c9; background:rgba(79,216,201,.14); }
+  .kpi.c-teal .label{ color:#8fe9df; }
+  .kpi.c-teal .value{ color:#4fd8c9; }
 
   .panel{ background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:20px 22px; margin-bottom:24px; }
   .panel-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px; }
@@ -617,6 +646,21 @@ function render(){
   cerrarDetalleKPI();
 }
 
+// ---- Colores e íconos de las tarjetas KPI (estilo neón) ----
+const KPI_COLOR_HEX = { red:'#ff5c5c', green:'#3ddc97', yellow:'#f7c948', blue:'#5b9dff', teal:'#4fd8c9' };
+function kpiIcon(kind){
+  const a = 'width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+  const iconos = {
+    warn:   `<svg ${a}><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+    check:  `<svg ${a}><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>`,
+    clock:  `<svg ${a}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+    money:  `<svg ${a}><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
+    chart:  `<svg ${a}><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>`,
+    door:   `<svg ${a}><path d="M3 21h18"/><path d="M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16"/><circle cx="14" cy="12" r="1"/></svg>`,
+  };
+  return iconos[kind] || '';
+}
+
 function renderKPIs(){
   const last = monthlyData[monthlyData.length-1];
   const totalPendFacturar = pendientesFacturar.reduce((a,r)=>a + (r.total||0), 0);
@@ -630,23 +674,25 @@ function renderKPIs(){
 
   const kpiRow = document.getElementById('kpi-row');
   const kpis = [
-    { tipo: 'detalleMensual', label: 'Detalle mensual', value: '📊 Ver', cls:'' },
-    { tipo: 'facturado', label: `Facturado — ${monthLabel(last.Mes)}`, value: fmtMoney(last.Facturado), cls:'' },
-    { tipo: 'conciliado', label: `Conciliado — ${monthLabel(last.Mes)}`, value: fmtMoney(last.Conciliado), cls:'' },
-    { tipo: 'pendFacturacion', label: 'Pendiente de facturación', value: fmtMoney(totalPendFacturacion), cls: totalPendFacturacion>0 ? 'warn':'ok' },
-    { tipo: 'facturasImpagas', label: 'Facturas pendientes de pago', value: fmtMoney(totalFacturasImpagas), cls: totalFacturasImpagas>0 ? 'warn':'ok' },
-    { tipo: 'cobradasMes', label: 'Facturas cobradas en el mes', value: fmtMoney(totalCobradasEsteMes), cls:'ok' },
-    { tipo: 'abiertas', label: 'Órdenes abiertas ahora', value: openOrders.length, cls:'warn' },
+    { tipo: 'detalleMensual', label: 'Detalle mensual', value: '📊 Ver', color:'blue', icon:'chart', sub:'Facturado vs. Cobrado por año' },
+    { tipo: 'facturado', label: `Facturado — ${monthLabel(last.Mes)}`, value: fmtMoney(last.Facturado), color:'blue', icon:'money', sub:'Total facturado del mes' },
+    { tipo: 'conciliado', label: `Conciliado — ${monthLabel(last.Mes)}`, value: fmtMoney(last.Conciliado), color:'teal', icon:'check', sub:'Conciliado sin factura' },
+    { tipo: 'pendFacturacion', label: 'Pendiente de facturación', value: fmtMoney(totalPendFacturacion), color: totalPendFacturacion>0 ? 'red':'green', icon:'clock', sub: totalPendFacturacion>0 ? 'Requieren facturar' : 'Todo al día' },
+    { tipo: 'facturasImpagas', label: 'Facturas pendientes de pago', value: fmtMoney(totalFacturasImpagas), color: totalFacturasImpagas>0 ? 'red':'green', icon:'warn', sub: totalFacturasImpagas>0 ? 'Cobrar cuanto antes' : 'Sin deuda' },
+    { tipo: 'cobradasMes', label: 'Facturas cobradas en el mes', value: fmtMoney(totalCobradasEsteMes), color:'green', icon:'money', sub: monthLabel(mesActualStr) },
+    { tipo: 'abiertas', label: 'Órdenes abiertas ahora', value: openOrders.length, color:'yellow', icon:'door', sub:'En proceso de reparación' },
   ];
   kpiRow.innerHTML = kpis.map(k => `
-    <div class="kpi ${k.cls}" data-tipo="${k.tipo}" style="cursor:pointer;">
+    <div class="kpi c-${k.color}" data-tipo="${k.tipo}" data-color="${k.color}">
+      <div class="icon">${kpiIcon(k.icon)}</div>
       <div class="label">${k.label}</div>
       <div class="value">${k.value}</div>
+      ${k.sub ? `<div class="sub">${k.sub}</div>` : ''}
     </div>
   `).join('');
 
   kpiRow.querySelectorAll('.kpi').forEach(el => {
-    el.addEventListener('click', () => mostrarDetalleKPI(el.dataset.tipo));
+    el.addEventListener('click', () => mostrarDetalleKPI(el.dataset.tipo, el.dataset.color));
   });
 }
 
@@ -654,22 +700,33 @@ let kpiActivo = null;
 
 function cerrarDetalleKPI(){
   kpiActivo = null;
-  document.getElementById('detalleKpiPanel').style.display = 'none';
+  const panel = document.getElementById('detalleKpiPanel');
+  panel.style.display = 'none';
+  panel.style.borderColor = '';
+  panel.style.borderLeft = '';
+  panel.style.boxShadow = '';
+  document.getElementById('detalleKpiTitulo').style.color = '';
   document.getElementById('btnExportarExcel').style.display = 'none';
-  document.querySelectorAll('#kpi-row .kpi').forEach(el => el.style.outline = '');
+  document.querySelectorAll('#kpi-row .kpi').forEach(el => el.style.boxShadow = '');
 }
 document.getElementById('detalleKpiCerrar').addEventListener('click', cerrarDetalleKPI);
 
-function mostrarDetalleKPI(tipo){
+function mostrarDetalleKPI(tipo, color){
   if (kpiActivo === tipo) { cerrarDetalleKPI(); return; }
   kpiActivo = tipo;
+  const colorHex = KPI_COLOR_HEX[color] || KPI_COLOR_HEX.green;
   document.querySelectorAll('#kpi-row .kpi').forEach(el => {
-    el.style.outline = (el.dataset.tipo === tipo) ? '2px solid var(--green)' : '';
+    el.style.boxShadow = (el.dataset.tipo === tipo) ? `0 0 0 2px ${KPI_COLOR_HEX[el.dataset.color] || colorHex}` : '';
   });
+
+  const panel = document.getElementById('detalleKpiPanel');
+  panel.style.borderColor = colorHex + '55';
+  panel.style.borderLeft = `4px solid ${colorHex}`;
+  panel.style.boxShadow = `0 0 0 1px ${colorHex}22 inset`;
+  document.getElementById('detalleKpiTitulo').style.color = colorHex;
 
   const tablaWrap = document.getElementById('detalleKpiTablaWrap');
   const chartWrap = document.getElementById('detalleKpiChartWrap');
-  const panel = document.getElementById('detalleKpiPanel');
 
   if (tipo === 'detalleMensual') {
     tablaWrap.style.display = 'none';
