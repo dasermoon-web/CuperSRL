@@ -703,6 +703,7 @@ function mostrarDetalleKPI(tipo){
   } else if (tipo === 'facturasImpagas') {
     lista = facturasImpagas;
     titulo = 'Facturas pendientes de pago';
+    fechaCol = (o) => o.fechaFact;
   } else if (tipo === 'cobradasMes') {
     lista = cobradasEsteMes;
     titulo = 'Facturas cobradas en el mes';
