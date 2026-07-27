@@ -808,8 +808,10 @@ function renderDetalleTabla(){
     const alignCss = c.align === 'left' ? 'text-align:left;' : '';
     if (!c.sortable) return `<th style="${alignCss}">${c.label}</th>`;
     const activo = detalleSortField === c.key;
-    const flecha = activo ? (detalleSortDir === 'asc' ? ' ▲' : ' ▼') : '';
-    return `<th data-sort-key="${c.key}" style="${alignCss} cursor:pointer; user-select:none;" title="Ordenar por ${c.label}">${c.label}${flecha}</th>`;
+    const icono = activo
+      ? (detalleSortDir === 'asc' ? ' ▲' : ' ▼')
+      : ' <span style="opacity:0.4;">⇅</span>';
+    return `<th data-sort-key="${c.key}" style="${alignCss} cursor:pointer; user-select:none;" title="Ordenar por ${c.label}">${c.label}${icono}</th>`;
   }).join('') + '</tr>';
 
   theadEl.querySelectorAll('th[data-sort-key]').forEach(th => {
