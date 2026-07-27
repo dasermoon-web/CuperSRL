@@ -747,7 +747,7 @@ function mostrarDetalleKPI(tipo, color){
   let fechaCol = (o) => (o.fechaCierre && o.fechaCierre !== 'N') ? o.fechaCierre : (o.fechaIng || '');
 
   if (tipo === 'facturado') {
-    lista = todosLosDocs.filter(r => r.fechaFact && r.fechaFact.slice(0,7) === last.Mes && categoria(r) === 'Facturado');
+    lista = todosLosDocs.filter(r => r.fechaFact && r.fechaFact.slice(0,7) === last.Mes && categoria(r) === 'Facturado' && r.facNro && r.facNro !== '');
     titulo = `Facturado — ${monthLabel(last.Mes)}`;
     fechaCol = (o) => o.fechaFact;
   } else if (tipo === 'conciliado') {
@@ -811,7 +811,7 @@ function getColumnasDetalle(tipo){
       { key:'importe', label:'Importe', sortable:true, align:'center' },
     ];
   }
-  if (tipo === 'facturasImpagas') {
+  if (tipo === 'facturasImpagas' || tipo === 'facturado') {
     return [
       { key:'orden', label:'Orden', sortable:true, align:'center' },
       { key:'cliente', label:'Cliente', sortable:true, align:'left' },
