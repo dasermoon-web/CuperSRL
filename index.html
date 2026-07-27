@@ -866,7 +866,7 @@ document.getElementById('btnExportarExcel').addEventListener('click', async () =
     sheet.getCell('C2').font = { size: 10, italic: true, color: { argb: 'FF6B6B6B' } };
 
     const filaHeader = 5;
-    const encabezados = ['Orden', 'Cliente', 'Vehículo', 'Dominio', 'Fecha', 'Importe'];
+    const encabezados = ['Orden', 'Cliente', 'Vehículo', 'Dominio', 'Fecha Factura', 'Importe'];
     sheet.getRow(filaHeader).values = encabezados;
     sheet.getRow(filaHeader).eachCell(cell => {
       cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -884,10 +884,10 @@ document.getElementById('btnExportarExcel').addEventListener('click', async () =
         o.razonSocial || '',
         o.vehiculo || '',
         o.dominio || '',
-        fmtISOaDDMMAA(fechaCol(o)),
+        fmtISOaDDMMAA(o.fechaFact),
         o.total || 0,
       ];
-      fila.getCell(6).numFmt = '$ #,##0';
+      fila.getCell(6).numFmt = '$ #,##0.00';
       fila.eachCell(cell => {
         cell.border = { bottom: { style: 'hair', color: { argb: 'FFE0E0E0' } } };
       });
@@ -901,7 +901,7 @@ document.getElementById('btnExportarExcel').addEventListener('click', async () =
     filaTotal.getCell(5).font = { bold: true };
     filaTotal.getCell(5).alignment = { horizontal: 'right' };
     filaTotal.getCell(6).value = total;
-    filaTotal.getCell(6).numFmt = '$ #,##0';
+    filaTotal.getCell(6).numFmt = '$ #,##0.00';
     filaTotal.getCell(6).font = { bold: true, color: { argb: 'FF1F4D37' } };
     filaTotal.eachCell(cell => {
       cell.border = { top: { style: 'thin', color: { argb: 'FF1F4D37' } } };
