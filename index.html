@@ -717,35 +717,10 @@ function mostrarDetalleKPI(tipo){
 
   document.getElementById('detalleKpiTitulo').textContent = `${titulo} (${lista.length})`;
 
-  const theadEl = document.getElementById('detalleKpiThead');
-  if (tipo === 'cobradasMes') {
-    theadEl.innerHTML = '<tr><th>Orden</th><th style="text-align:left;">Cliente</th><th style="text-align:left;">Vehículo</th><th>Factura</th><th>Modo de pago</th><th>Importe</th></tr>';
-    document.getElementById('detalleKpiBody').innerHTML = lista.length
-      ? lista.map(o => `
-          <tr>
-            <td>${o.orden}</td>
-            <td style="text-align:left;">${o.razonSocial || ''}</td>
-            <td style="text-align:left;">${o.vehiculo || ''} ${o.dominio ? '· ' + o.dominio : ''}</td>
-            <td>${o.facNro || (o.facSN ? o.facSN : '')}</td>
-            <td>${o.condicion || ''}</td>
-            <td>${fmtMoney(o.total||0)}</td>
-          </tr>
-        `).join('')
-      : '<tr><td colspan="6" style="text-align:center; color:var(--text-dim);">Sin registros</td></tr>';
-  } else {
-    theadEl.innerHTML = '<tr><th>Orden</th><th style="text-align:left;">Cliente</th><th style="text-align:left;">Vehículo</th><th>Fecha</th><th>Importe</th></tr>';
-    document.getElementById('detalleKpiBody').innerHTML = lista.length
-      ? lista.map(o => `
-          <tr>
-            <td>${o.orden}</td>
-            <td style="text-align:left;">${o.razonSocial || ''}</td>
-            <td style="text-align:left;">${o.vehiculo || ''} ${o.dominio ? '· ' + o.dominio : ''}</td>
-            <td>${fmtISOaDDMMAA(fechaCol(o))}</td>
-            <td>${fmtMoney(o.total||0)}</td>
-          </tr>
-        `).join('')
-      : '<tr><td colspan="5" style="text-align:center; color:var(--text-dim);">Sin registros</td></tr>';
-  }
+  detalleSortField = null;
+  detalleSortDir = 'asc';
+  detalleCtx = { tipo, lista: [...lista], fechaCol };
+  renderDetalleTabla();
 
   // Exportar a Excel: solo disponible para estas dos tarjetas
   const btnExport = document.getElementById('btnExportarExcel');
@@ -761,6 +736,101 @@ function mostrarDetalleKPI(tipo){
   panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 let exportData = null;
+
+// ---- Tabla de detalle de KPI: columnas configurables + orden por click en encabezado ----
+let detalleSortField = null;
+let detalleSortDir = 'asc';
+let detalleCtx = { tipo: '', lista: [], fechaCol: null };
+
+function getColumnasDetalle(tipo){
+  if (tipo === 'cobradasMes') {
+    return [
+      { key:'orden', label:'Orden', sortable:true, align:'center' },
+      { key:'cliente', label:'Cliente', sortable:true, align:'left' },
+      { key:'vehiculo', label:'Vehículo', sortable:false, align:'left' },
+      { key:'factura', label:'Factura', sortable:false, align:'center' },
+      { key:'condicion', label:'Modo de pago', sortable:false, align:'center' },
+      { key:'importe', label:'Importe', sortable:true, align:'center' },
+    ];
+  }
+  if (tipo === 'facturasImpagas') {
+    return [
+      { key:'orden', label:'Orden', sortable:true, align:'center' },
+      { key:'cliente', label:'Cliente', sortable:true, align:'left' },
+      { key:'vehiculo', label:'Vehículo', sortable:false, align:'left' },
+      { key:'factura', label:'Factura', sortable:false, align:'center' },
+      { key:'fecha', label:'Fecha', sortable:true, align:'center' },
+      { key:'importe', label:'Importe', sortable:true, align:'center' },
+    ];
+  }
+  return [
+    { key:'orden', label:'Orden', sortable:true, align:'center' },
+    { key:'cliente', label:'Cliente', sortable:true, align:'left' },
+    { key:'vehiculo', label:'Vehículo', sortable:false, align:'left' },
+    { key:'fecha', label:'Fecha', sortable:true, align:'center' },
+    { key:'importe', label:'Importe', sortable:true, align:'center' },
+  ];
+}
+
+function valorCeldaDetalle(o, key, fechaCol){
+  switch(key){
+    case 'orden': return o.orden || '';
+    case 'cliente': return o.razonSocial || '';
+    case 'vehiculo': return `${o.vehiculo||''} ${o.dominio ? '· ' + o.dominio : ''}`;
+    case 'factura': return o.facNro || (o.facSN ? o.facSN : '');
+    case 'condicion': return o.condicion || '';
+    case 'fecha': return fechaCol ? (fechaCol(o) || '') : '';
+    case 'importe': return o.total || 0;
+    default: return '';
+  }
+}
+
+function ordenarListaDetalle(lista, key, dir, fechaCol){
+  const factor = dir === 'asc' ? 1 : -1;
+  const copia = [...lista];
+  copia.sort((a, b) => {
+    const va = valorCeldaDetalle(a, key, fechaCol);
+    const vb = valorCeldaDetalle(b, key, fechaCol);
+    if (key === 'importe') return factor * (va - vb);
+    return factor * ('' + va).toLowerCase().localeCompare(('' + vb).toLowerCase(), 'es', { numeric: true });
+  });
+  return copia;
+}
+
+function renderDetalleTabla(){
+  const { tipo, lista, fechaCol } = detalleCtx;
+  const columnas = getColumnasDetalle(tipo);
+  const theadEl = document.getElementById('detalleKpiThead');
+  const bodyEl = document.getElementById('detalleKpiBody');
+
+  theadEl.innerHTML = '<tr>' + columnas.map(c => {
+    const alignCss = c.align === 'left' ? 'text-align:left;' : '';
+    if (!c.sortable) return `<th style="${alignCss}">${c.label}</th>`;
+    const activo = detalleSortField === c.key;
+    const flecha = activo ? (detalleSortDir === 'asc' ? ' ▲' : ' ▼') : '';
+    return `<th data-sort-key="${c.key}" style="${alignCss} cursor:pointer; user-select:none;" title="Ordenar por ${c.label}">${c.label}${flecha}</th>`;
+  }).join('') + '</tr>';
+
+  theadEl.querySelectorAll('th[data-sort-key]').forEach(th => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.sortKey;
+      detalleSortDir = (detalleSortField === key && detalleSortDir === 'asc') ? 'desc' : 'asc';
+      detalleSortField = key;
+      detalleCtx.lista = ordenarListaDetalle(detalleCtx.lista, detalleSortField, detalleSortDir, fechaCol);
+      renderDetalleTabla();
+    });
+  });
+
+  bodyEl.innerHTML = lista.length
+    ? lista.map(o => '<tr>' + columnas.map(c => {
+        const alignCss = c.align === 'left' ? 'text-align:left;' : '';
+        let val = valorCeldaDetalle(o, c.key, fechaCol);
+        if (c.key === 'importe') val = fmtMoney(val);
+        if (c.key === 'fecha') val = fmtISOaDDMMAA(val);
+        return `<td style="${alignCss}">${val}</td>`;
+      }).join('') + '</tr>').join('')
+    : `<tr><td colspan="${columnas.length}" style="text-align:center; color:var(--text-dim);">Sin registros</td></tr>`;
+}
 
 document.getElementById('btnExportarExcel').addEventListener('click', async () => {
   if (!exportData) return;
