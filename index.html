@@ -283,7 +283,10 @@
           <div id="detalleMesOrdenesWrap" style="display:none; margin-top:22px; padding-top:18px; border-top:1px solid var(--line);">
             <div class="panel-head" style="margin-bottom:12px;">
               <h3 id="detalleMesOrdenesTitulo" style="font-size:13px; margin:0; text-transform:uppercase; letter-spacing:1px; color:var(--text);"></h3>
-              <button type="button" class="btn secondary" id="detalleMesOrdenesCerrar">Cerrar ✕</button>
+              <div style="display:flex; gap:8px;">
+                <button type="button" class="btn secondary" id="btnExportarMesOrdenes">📥 Reporte</button>
+                <button type="button" class="btn secondary" id="detalleMesOrdenesCerrar">Cerrar ✕</button>
+              </div>
             </div>
             <div style="max-height:380px; overflow-y:auto;">
               <table>
@@ -1135,6 +1138,7 @@ function round2(n){ return Math.round(n * 100) / 100; }
 
 // ---- Drill-down: listado de OR cerradas de un mes puntual ----
 let mesOrdenesActivo = null;
+let mesOrdenesExportData = null;
 function mostrarOrdenesDelMes(mesKey, label){
   const wrap = document.getElementById('detalleMesOrdenesWrap');
   if (mesOrdenesActivo === mesKey) {
@@ -1147,6 +1151,8 @@ function mostrarOrdenesDelMes(mesKey, label){
   const ordenes = todosLosDocs
     .filter(r => r.fechaCierre && r.fechaCierre.slice(0,7) === mesKey)
     .sort((a,b) => (b.total||0) - (a.total||0));
+
+  mesOrdenesExportData = { titulo: `OR cerradas — ${label}`, lista: ordenes };
 
   document.getElementById('detalleMesOrdenesTitulo').textContent = `OR cerradas — ${label} (${ordenes.length})`;
   document.getElementById('detalleMesOrdenesBody').innerHTML = ordenes.length
@@ -1171,6 +1177,104 @@ function mostrarOrdenesDelMes(mesKey, label){
 document.getElementById('detalleMesOrdenesCerrar').addEventListener('click', () => {
   document.getElementById('detalleMesOrdenesWrap').style.display = 'none';
   mesOrdenesActivo = null;
+});
+
+document.getElementById('btnExportarMesOrdenes').addEventListener('click', async () => {
+  if (!mesOrdenesExportData) return;
+  const btn = document.getElementById('btnExportarMesOrdenes');
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Generando...';
+  try {
+    const { titulo, lista } = mesOrdenesExportData;
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Taller CuperSRL';
+    workbook.created = new Date();
+    const sheet = workbook.addWorksheet('Reporte', { views: [{ showGridLines: false }] });
+
+    const imgEl = document.querySelector('.brand img');
+    if (imgEl && imgEl.src.startsWith('data:image/png;base64,')) {
+      const base64 = imgEl.src.split(',')[1];
+      const imageId = workbook.addImage({ base64, extension: 'png' });
+      sheet.addImage(imageId, { tl: { col: 0.1, row: 0.2 }, ext: { width: 150, height: 62 } });
+    }
+    sheet.getRow(1).height = 26;
+    sheet.getRow(2).height = 26;
+    sheet.getRow(3).height = 10;
+
+    sheet.mergeCells('C1:G1');
+    sheet.getCell('C1').value = titulo;
+    sheet.getCell('C1').font = { size: 16, bold: true, color: { argb: 'FF1F4D37' } };
+
+    sheet.mergeCells('C2:G2');
+    sheet.getCell('C2').value = `Cuper SRL — Generado el ${fmtFechaDDMMAA(new Date())}`;
+    sheet.getCell('C2').font = { size: 10, italic: true, color: { argb: 'FF6B6B6B' } };
+
+    const filaHeader = 5;
+    const encabezados = ['Orden', 'Cliente', 'Vehículo', 'Dominio', 'Factura', 'Importe', 'Cobrada'];
+    sheet.getRow(filaHeader).values = encabezados;
+    sheet.getRow(filaHeader).eachCell(cell => {
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4D37' } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.border = { bottom: { style: 'thin', color: { argb: 'FF313A33' } } };
+    });
+
+    let filaActual = filaHeader + 1;
+    let total = 0;
+    lista.forEach(o => {
+      const cobrada = !o.facturaImpaga;
+      const fila = sheet.getRow(filaActual);
+      fila.values = [
+        o.orden,
+        toTitleCase(o.razonSocial || ''),
+        toTitleCase(o.vehiculo || ''),
+        o.dominio || '',
+        o.facNro || (o.facSN ? o.facSN : ''),
+        o.total || 0,
+        cobrada ? 'Sí' : 'No',
+      ];
+      fila.getCell(6).numFmt = '$ #,##0.00';
+      fila.getCell(7).font = { color: { argb: cobrada ? 'FF2E7D4F' : 'FFB3372C' }, bold: true };
+      fila.eachCell(cell => {
+        cell.border = { bottom: { style: 'hair', color: { argb: 'FFE0E0E0' } } };
+      });
+      total += (o.total || 0);
+      filaActual++;
+    });
+
+    const filaTotal = sheet.getRow(filaActual + 1);
+    filaTotal.getCell(5).value = 'TOTAL';
+    filaTotal.getCell(5).font = { bold: true };
+    filaTotal.getCell(5).alignment = { horizontal: 'right' };
+    filaTotal.getCell(6).value = total;
+    filaTotal.getCell(6).numFmt = '$ #,##0.00';
+    filaTotal.getCell(6).font = { bold: true, color: { argb: 'FF1F4D37' } };
+    filaTotal.eachCell(cell => {
+      cell.border = { top: { style: 'thin', color: { argb: 'FF1F4D37' } } };
+    });
+
+    sheet.columns = [
+      { width: 12 }, { width: 30 }, { width: 22 }, { width: 14 }, { width: 14 }, { width: 16 }, { width: 12 },
+    ];
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const nombreArchivo = titulo.replace(/[^\wÀ-ÿ]+/g, '_') + '.xlsx';
+    a.href = url;
+    a.download = nombreArchivo;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert('Error generando el Excel: ' + err.message);
+  }
+  btn.disabled = false;
+  btn.textContent = textoOriginal;
 });
 window.addEventListener('resize', () => {
   if (kpiActivo === 'detalleMensual') {
