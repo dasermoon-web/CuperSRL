@@ -109,6 +109,11 @@
   .kpi.c-teal .label{ color:#8fe9df; }
   .kpi.c-teal .value{ color:#4fd8c9; }
 
+  .kpi.c-orange{ border-color:rgba(255,153,68,.35); background:radial-gradient(120% 120% at 18% 0%, rgba(255,153,68,.12), var(--panel) 65%); }
+  .kpi.c-orange .icon{ color:#ff9944; background:rgba(255,153,68,.14); }
+  .kpi.c-orange .label{ color:#ffbd82; }
+  .kpi.c-orange .value{ color:#ff9944; }
+
   .panel{ background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:20px 22px; margin-bottom:24px; }
   .panel-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px; }
   .panel-head h2{ font-size:15px; margin:0; text-transform:uppercase; letter-spacing:1.5px; color:var(--text); }
@@ -605,13 +610,13 @@ function procesarDatos(docs){
   facturasImpagas = docs.filter(rec => rec.facturaImpaga && rec.total);
 
   docs.forEach(rec => {
-    // --- OR Cerradas / OR Cobradas (col. A = fecha de cierre, col. O = pendienteCobro) ---
+    // --- OR Cerradas / OR Cobradas (col. A = fecha de cierre, col. AG = facturaImpaga) ---
     if (rec.fechaCierre && rec.fechaCierre !== 'N') {
       const mesCierre = rec.fechaCierre.slice(0,7);
       if (!cierresMap[mesCierre]) cierresMap[mesCierre] = { Mes: mesCierre, CantidadCerradas: 0, ImporteCerrado: 0, ImporteCobrado: 0 };
       cierresMap[mesCierre].CantidadCerradas += 1;
       cierresMap[mesCierre].ImporteCerrado += (rec.total || 0);
-      if (!rec.pendienteCobro) cierresMap[mesCierre].ImporteCobrado += (rec.total || 0); // col. O = "N" → se cobró de algún modo
+      if (!rec.facturaImpaga) cierresMap[mesCierre].ImporteCobrado += (rec.total || 0); // col. AG = "NO" → sin cobrar
     }
 
     if (!rec.fechaCierre || rec.fechaCierre === 'N') {
@@ -659,7 +664,7 @@ function render(){
 }
 
 // ---- Colores e íconos de las tarjetas KPI (estilo neón) ----
-const KPI_COLOR_HEX = { red:'#ff5c5c', green:'#3ddc97', yellow:'#f7c948', blue:'#5b9dff', teal:'#4fd8c9' };
+const KPI_COLOR_HEX = { red:'#ff5c5c', green:'#3ddc97', yellow:'#f7c948', blue:'#5b9dff', teal:'#4fd8c9', orange:'#ff9944' };
 function kpiIcon(kind){
   const a = 'width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
   const iconos = {
@@ -686,7 +691,7 @@ function renderKPIs(){
 
   const kpiRow = document.getElementById('kpi-row');
   const kpis = [
-    { tipo: 'detalleMensual', label: 'Detalle general', value: 'Ver', color:'blue', icon:'chart', sub:'OR cerradas vs. OR cobradas' },
+    { tipo: 'detalleMensual', label: 'Detalle general', value: '', color:'orange', icon:'chart', sub:'OR cerradas vs. OR cobradas' },
     { tipo: 'facturado', label: `Facturado — ${monthLabel(last.Mes)}`, value: fmtMoney(last.Facturado), color:'blue', icon:'money', sub:'Total facturado del mes' },
     { tipo: 'conciliado', label: `Conciliado — ${monthLabel(last.Mes)}`, value: fmtMoney(last.Conciliado), color:'teal', icon:'check', sub:'Conciliado sin factura' },
     { tipo: 'pendFacturacion', label: 'Pendiente de facturación', value: fmtMoney(totalPendFacturacion), color: totalPendFacturacion>0 ? 'red':'green', icon:'clock', sub: totalPendFacturacion>0 ? 'Requieren facturar' : 'Todo al día' },
