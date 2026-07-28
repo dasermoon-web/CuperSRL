@@ -830,11 +830,16 @@ function getColumnasDetalle(tipo){
   ];
 }
 
+function toTitleCase(str){
+  if (!str) return '';
+  return str.toString().toLowerCase().replace(/(^|[\s\-'/.])\S/g, c => c.toUpperCase());
+}
+
 function valorCeldaDetalle(o, key, fechaCol){
   switch(key){
     case 'orden': return o.orden || '';
-    case 'cliente': return o.razonSocial || '';
-    case 'vehiculo': return `${o.vehiculo||''} ${o.dominio ? '· ' + o.dominio : ''}`;
+    case 'cliente': return toTitleCase(o.razonSocial || '');
+    case 'vehiculo': return `${toTitleCase(o.vehiculo||'')} ${o.dominio ? '· ' + o.dominio : ''}`;
     case 'factura': return o.facNro || (o.facSN ? o.facSN : '');
     case 'condicion': return o.condicion || '';
     case 'fecha': return fechaCol ? (fechaCol(o) || '') : '';
@@ -941,8 +946,8 @@ document.getElementById('btnExportarExcel').addEventListener('click', async () =
       const fila = sheet.getRow(filaActual);
       fila.values = [
         o.orden,
-        o.razonSocial || '',
-        o.vehiculo || '',
+        toTitleCase(o.razonSocial || ''),
+        toTitleCase(o.vehiculo || ''),
         o.dominio || '',
         fmtISOaDDMMAA(o.fechaFact),
         o.total || 0,
@@ -1553,7 +1558,7 @@ document.getElementById('btnProcesarPDF').addEventListener('click', async () => 
       // solo al crearla por primera vez, dejamos vacios los campos de facturacion
       Object.assign(datosOrden, {
         condicion: '', facNro: '', facSN: '', fechaFact: '',
-        fechaCobro: '', pendienteCobro: false, facturaImpaga: false,
+        fechaCobro: '', pendienteCobro: true, facturaImpaga: false,
       });
     }
     await refOrden.set(datosOrden, { merge: true });
