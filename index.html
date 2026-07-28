@@ -279,6 +279,19 @@
               <tbody id="detalleAnioTablaBody"></tbody>
             </table>
           </div>
+
+          <div id="detalleMesOrdenesWrap" style="display:none; margin-top:22px; padding-top:18px; border-top:1px solid var(--line);">
+            <div class="panel-head" style="margin-bottom:12px;">
+              <h3 id="detalleMesOrdenesTitulo" style="font-size:13px; margin:0; text-transform:uppercase; letter-spacing:1px; color:var(--text);"></h3>
+              <button type="button" class="btn secondary" id="detalleMesOrdenesCerrar">Cerrar ✕</button>
+            </div>
+            <div style="max-height:380px; overflow-y:auto;">
+              <table>
+                <thead><tr><th>Orden</th><th style="text-align:left;">Cliente</th><th style="text-align:left;">Vehículo</th><th>Factura</th><th>Importe</th><th>Cobrada</th></tr></thead>
+                <tbody id="detalleMesOrdenesBody"></tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -725,6 +738,8 @@ function cerrarDetalleKPI(){
   document.getElementById('detalleKpiTitulo').style.color = '';
   document.getElementById('btnExportarExcel').style.display = 'none';
   document.querySelectorAll('#kpi-row .kpi').forEach(el => el.style.boxShadow = '');
+  document.getElementById('detalleMesOrdenesWrap').style.display = 'none';
+  mesOrdenesActivo = null;
 }
 document.getElementById('detalleKpiCerrar').addEventListener('click', cerrarDetalleKPI);
 
@@ -1030,6 +1045,7 @@ function renderGraficoAnual(anio){
     const encontrado = monthlyCierres.find(r => r.Mes === mesKey);
     return {
       nombre,
+      mesKey,
       Cantidad: encontrado ? encontrado.CantidadCerradas : 0,
       ImporteCerrado: encontrado ? encontrado.ImporteCerrado : 0,
       ImporteCobrado: encontrado ? encontrado.ImporteCobrado : 0,
@@ -1066,11 +1082,13 @@ function renderGraficoAnual(anio){
     const x = xCentro - barW/2;
     const cerradoH = plotH - yScale(d.ImporteCerrado);
     const yCerrado = padTop + plotH - cerradoH;
-    svg += `<rect x="${x}" y="${yCerrado}" width="${barW}" height="${Math.max(cerradoH,0)}" rx="3" fill="var(--green)"><title>${d.nombre}: ${d.Cantidad} OR por ${fmtMoney(d.ImporteCerrado)}</title></rect>`;
+    // franja invisible que cubre toda la columna del mes, para que sea fácil de tocar aunque la barra sea chica
+    svg += `<rect x="${padLeft + step*i}" y="${padTop}" width="${step}" height="${plotH}" fill="transparent" style="cursor:pointer;" data-mes="${d.mesKey}" data-label="${d.nombre} ${anio}"><title>Ver detalle de ${d.nombre}</title></rect>`;
+    svg += `<rect x="${x}" y="${yCerrado}" width="${barW}" height="${Math.max(cerradoH,0)}" rx="3" fill="var(--green)" style="pointer-events:none;"><title>${d.nombre}: ${d.Cantidad} OR por ${fmtMoney(d.ImporteCerrado)}</title></rect>`;
     if (d.Cantidad > 0) {
-      svg += `<text x="${xCentro}" y="${yCerrado-6}" text-anchor="middle" font-family="monospace" font-size="11" font-weight="700" fill="var(--text)">OR ${d.Cantidad}</text>`;
+      svg += `<text x="${xCentro}" y="${yCerrado-6}" text-anchor="middle" font-family="monospace" font-size="11" font-weight="700" fill="var(--text)" style="pointer-events:none;">OR ${d.Cantidad}</text>`;
     }
-    svg += `<text x="${xCentro}" y="${height-padBottom+16}" text-anchor="middle" font-family="monospace" font-size="10" fill="var(--text-dim)">${d.nombre}</text>`;
+    svg += `<text x="${xCentro}" y="${height-padBottom+16}" text-anchor="middle" font-family="monospace" font-size="10" fill="var(--text-dim)" style="pointer-events:none;">${d.nombre}</text>`;
   });
 
   // Línea: importe cobrado de esas OR, pasando por encima de las barras
@@ -1088,13 +1106,16 @@ function renderGraficoAnual(anio){
 
   svg += `</svg>`;
   contenedor.innerHTML = svg;
+  contenedor.querySelectorAll('rect[data-mes]').forEach(rect => {
+    rect.addEventListener('click', () => mostrarOrdenesDelMes(rect.dataset.mes, rect.dataset.label));
+  });
 
   // Tabla debajo del gráfico
   const tbody = document.getElementById('detalleAnioTablaBody');
   tbody.innerHTML = datosPorMes.map(d => {
     const diferencia = round2(d.ImporteCerrado - d.ImporteCobrado);
     return `
-      <tr>
+      <tr data-mes="${d.mesKey}" data-label="${d.nombre} ${anio}" style="cursor:pointer;" title="Ver detalle de OR de ${d.nombre}">
         <td>${d.nombre} ${anio}</td>
         <td>${fmtMoney(d.ImporteCerrado)}</td>
         <td>${fmtMoney(d.ImporteCobrado)}</td>
@@ -1102,8 +1123,55 @@ function renderGraficoAnual(anio){
       </tr>
     `;
   }).join('');
+  tbody.querySelectorAll('tr[data-mes]').forEach(fila => {
+    fila.addEventListener('mouseenter', () => fila.style.background = 'var(--green-soft)');
+    fila.addEventListener('mouseleave', () => fila.style.background = '');
+    fila.addEventListener('click', () => mostrarOrdenesDelMes(fila.dataset.mes, fila.dataset.label));
+  });
+
+  document.getElementById('detalleMesOrdenesWrap').style.display = 'none';
 }
 function round2(n){ return Math.round(n * 100) / 100; }
+
+// ---- Drill-down: listado de OR cerradas de un mes puntual ----
+let mesOrdenesActivo = null;
+function mostrarOrdenesDelMes(mesKey, label){
+  const wrap = document.getElementById('detalleMesOrdenesWrap');
+  if (mesOrdenesActivo === mesKey) {
+    wrap.style.display = 'none';
+    mesOrdenesActivo = null;
+    return;
+  }
+  mesOrdenesActivo = mesKey;
+
+  const ordenes = todosLosDocs
+    .filter(r => r.fechaCierre && r.fechaCierre.slice(0,7) === mesKey)
+    .sort((a,b) => (b.total||0) - (a.total||0));
+
+  document.getElementById('detalleMesOrdenesTitulo').textContent = `OR cerradas — ${label} (${ordenes.length})`;
+  document.getElementById('detalleMesOrdenesBody').innerHTML = ordenes.length
+    ? ordenes.map(o => {
+        const cobrada = !o.facturaImpaga;
+        return `
+          <tr>
+            <td>${o.orden}</td>
+            <td style="text-align:left;">${toTitleCase(o.razonSocial || '')}</td>
+            <td style="text-align:left;">${toTitleCase(o.vehiculo || '')} ${o.dominio ? '· ' + o.dominio : ''}</td>
+            <td>${o.facNro || (o.facSN ? o.facSN : '')}</td>
+            <td>${fmtMoney(o.total || 0)}</td>
+            <td style="color:${cobrada ? 'var(--green)' : 'var(--warn)'}; font-weight:700;">${cobrada ? 'Sí' : 'No'}</td>
+          </tr>
+        `;
+      }).join('')
+    : '<tr><td colspan="6" style="text-align:center; color:var(--text-dim);">Sin registros</td></tr>';
+
+  wrap.style.display = 'block';
+  wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+document.getElementById('detalleMesOrdenesCerrar').addEventListener('click', () => {
+  document.getElementById('detalleMesOrdenesWrap').style.display = 'none';
+  mesOrdenesActivo = null;
+});
 window.addEventListener('resize', () => {
   if (kpiActivo === 'detalleMensual') {
     const sel = document.getElementById('detalleAnioSelector');
