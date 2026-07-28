@@ -240,7 +240,6 @@
     <div id="loadingMsg">Cargando datos desde Firestore...</div>
 
     <div id="content" style="display:none;">
-      <div class="panel-sub" style="margin:-4px 0 10px;">Tocá cualquier tarjeta para ver el detalle.</div>
       <div class="kpis" id="kpi-row"></div>
 
       <div class="panel" id="detalleKpiPanel" style="display:none;">
@@ -265,13 +264,13 @@
             <select id="detalleAnioSelector" style="background:var(--panel-2); border:1px solid var(--line); color:var(--text); padding:8px 12px; border-radius:5px; font-family:var(--mono); font-size:13px;"></select>
           </div>
           <div class="legend-mini" style="margin-bottom:10px;">
-            <span><span class="dot" style="background:var(--green)"></span>Facturado</span>
-            <span><span class="dot" style="background:rgb(0,0,225)"></span>Cobrado</span>
+            <span><span class="dot" style="background:var(--green)"></span>OR Cerradas</span>
+            <span><span class="dot" style="background:rgb(0,0,225)"></span>OR Cobradas</span>
           </div>
           <div id="detalleChartScroll" style="overflow-x:auto;"></div>
           <div style="max-height:340px; overflow-y:auto; margin-top:18px;">
             <table>
-              <thead><tr><th>Mes</th><th>Facturado</th><th>Cobrado</th><th>Diferencia</th></tr></thead>
+              <thead><tr><th>Mes</th><th>Cerradas</th><th>Cobradas</th><th>Diferencia</th></tr></thead>
               <tbody id="detalleAnioTablaBody"></tbody>
             </table>
           </div>
@@ -582,6 +581,7 @@ const fmtISOaDDMMAA = (isoStr) => {
 };
 
 let monthlyData = [];
+let monthlyCierres = [];
 let openOrders = [];
 let pendientesFacturar = [];
 let pendientesCobroMarcados = [];
@@ -597,6 +597,7 @@ function categoria(rec){
 
 function procesarDatos(docs){
   const mesesMap = {};
+  const cierresMap = {};
   todosLosDocs = docs;
   openOrders = [];
   pendientesFacturar = [];
@@ -604,6 +605,14 @@ function procesarDatos(docs){
   facturasImpagas = docs.filter(rec => rec.facturaImpaga && rec.total);
 
   docs.forEach(rec => {
+    // --- OR Cerradas / OR Cobradas (col. A = fecha de cierre, col. O = pendienteCobro) ---
+    if (rec.fechaCierre && rec.fechaCierre !== 'N') {
+      const mesCierre = rec.fechaCierre.slice(0,7);
+      if (!cierresMap[mesCierre]) cierresMap[mesCierre] = { Mes: mesCierre, Cerradas: 0, Cobradas: 0 };
+      cierresMap[mesCierre].Cerradas += 1;
+      if (!rec.pendienteCobro) cierresMap[mesCierre].Cobradas += 1; // col. O = "N" → se cobró de algún modo
+    }
+
     if (!rec.fechaCierre || rec.fechaCierre === 'N') {
       openOrders.push(rec);
       return;
@@ -629,6 +638,8 @@ function procesarDatos(docs){
     return m;
   }).sort((a,b) => a.Mes.localeCompare(b.Mes));
 
+  monthlyCierres = Object.values(cierresMap).sort((a,b) => a.Mes.localeCompare(b.Mes));
+
   pendientesFacturar.sort((a,b) => (a.fechaCierre||'').localeCompare(b.fechaCierre||''));
 }
 
@@ -637,7 +648,7 @@ function render(){
   document.getElementById('content').style.display = 'block';
   document.getElementById('last-month-tag').textContent = fmtFechaDDMMAA(ultimaCargaFecha);
 
-  if (monthlyData.length === 0){
+  if (todosLosDocs.length === 0){
     document.getElementById('content').innerHTML = '<div class="panel">Todavía no hay datos cargados. Usá la pestaña "Cargar OR".</div>';
     return;
   }
@@ -662,7 +673,7 @@ function kpiIcon(kind){
 }
 
 function renderKPIs(){
-  const last = monthlyData[monthlyData.length-1];
+  const last = monthlyData[monthlyData.length-1] || { Mes: `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}`, Facturado: 0, Conciliado: 0 };
   const totalPendFacturar = pendientesFacturar.reduce((a,r)=>a + (r.total||0), 0);
   const totalPendFacturacion = pendientesCobroMarcados.reduce((a,r)=>a + (r.total||0), 0);
   const totalFacturasImpagas = facturasImpagas.reduce((a,r)=>a + (r.total||0), 0);
@@ -674,7 +685,7 @@ function renderKPIs(){
 
   const kpiRow = document.getElementById('kpi-row');
   const kpis = [
-    { tipo: 'detalleMensual', label: 'Detalle mensual', value: '📊 Ver', color:'blue', icon:'chart', sub:'Facturado vs. Cobrado por año' },
+    { tipo: 'detalleMensual', label: 'Detalle general', value: '📊 Ver', color:'blue', icon:'chart', sub:'OR cerradas vs. OR cobradas' },
     { tipo: 'facturado', label: `Facturado — ${monthLabel(last.Mes)}`, value: fmtMoney(last.Facturado), color:'blue', icon:'money', sub:'Total facturado del mes' },
     { tipo: 'conciliado', label: `Conciliado — ${monthLabel(last.Mes)}`, value: fmtMoney(last.Conciliado), color:'teal', icon:'check', sub:'Conciliado sin factura' },
     { tipo: 'pendFacturacion', label: 'Pendiente de facturación', value: fmtMoney(totalPendFacturacion), color: totalPendFacturacion>0 ? 'red':'green', icon:'clock', sub: totalPendFacturacion>0 ? 'Requieren facturar' : 'Todo al día' },
@@ -731,7 +742,7 @@ function mostrarDetalleKPI(tipo, color){
   if (tipo === 'detalleMensual') {
     tablaWrap.style.display = 'none';
     chartWrap.style.display = 'block';
-    document.getElementById('detalleKpiTitulo').textContent = 'Detalle mensual — Facturado vs. Cobrado';
+    document.getElementById('detalleKpiTitulo').textContent = 'Detalle general — OR Cerradas vs. OR Cobradas';
     panel.style.display = 'block';
     prepararSelectorAnio();
     panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -741,7 +752,7 @@ function mostrarDetalleKPI(tipo, color){
   tablaWrap.style.display = 'block';
   chartWrap.style.display = 'none';
 
-  const last = monthlyData[monthlyData.length-1];
+  const last = monthlyData[monthlyData.length-1] || { Mes: `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}`, Facturado: 0, Conciliado: 0 };
   let lista = [];
   let titulo = '';
   let fechaCol = (o) => (o.fechaCierre && o.fechaCierre !== 'N') ? o.fechaCierre : (o.fechaIng || '');
@@ -998,7 +1009,7 @@ document.getElementById('btnExportarExcel').addEventListener('click', async () =
 // ---------- Gráfico anual Facturado vs Conciliado ----------
 function prepararSelectorAnio(){
   const sel = document.getElementById('detalleAnioSelector');
-  const anios = [...new Set(monthlyData.map(r => r.Mes.slice(0,4)))].sort().reverse();
+  const anios = [...new Set(monthlyCierres.map(r => r.Mes.slice(0,4)))].sort().reverse();
   const anioActual = sel.value || anios[0];
   sel.innerHTML = anios.map(a => `<option value="${a}">${a}</option>`).join('');
   sel.value = anios.includes(anioActual) ? anioActual : anios[0];
@@ -1010,11 +1021,11 @@ function renderGraficoAnual(anio){
   const NOMBRES_MES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   const datosPorMes = NOMBRES_MES.map((nombre, i) => {
     const mesKey = `${anio}-${String(i+1).padStart(2,'0')}`;
-    const encontrado = monthlyData.find(r => r.Mes === mesKey);
-    return { nombre, Facturado: encontrado ? encontrado.Facturado : 0, Cobrado: encontrado ? encontrado.CobradoFacturado : 0 };
+    const encontrado = monthlyCierres.find(r => r.Mes === mesKey);
+    return { nombre, Cerradas: encontrado ? encontrado.Cerradas : 0, Cobradas: encontrado ? encontrado.Cobradas : 0 };
   });
 
-  const height = 320, padTop = 16, padBottom = 32, padLeft = 60, padRight = 20;
+  const height = 320, padTop = 28, padBottom = 32, padLeft = 44, padRight = 20;
   const plotH = height - padTop - padBottom;
   const contenedor = document.getElementById('detalleChartScroll');
   const width = Math.max(contenedor.clientWidth || 900, 320);
@@ -1022,9 +1033,8 @@ function renderGraficoAnual(anio){
   const step = plotW / 12;
   const barW = Math.min(46, step * 0.55);
 
-  const maxVal = Math.max(1, ...datosPorMes.map(d => Math.max(d.Facturado, d.Cobrado)));
-  const magnitude = Math.pow(10, Math.floor(Math.log10(maxVal)));
-  const niceMax = Math.ceil(maxVal / (magnitude/2)) * (magnitude/2);
+  const maxVal = Math.max(1, ...datosPorMes.map(d => Math.max(d.Cerradas, d.Cobradas)));
+  const niceMax = Math.ceil(maxVal * 1.15);
   const yScale = (v) => plotH - (v / niceMax) * plotH;
 
   let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" height="${height}" preserveAspectRatio="none">`;
@@ -1033,32 +1043,35 @@ function renderGraficoAnual(anio){
     const v = niceMax * i / 4;
     const y = padTop + yScale(v);
     svg += `<line x1="${padLeft}" y1="${y}" x2="${width-padRight}" y2="${y}" stroke="rgba(255,255,255,0.06)"></line>`;
-    svg += `<text x="${padLeft-8}" y="${y+3}" text-anchor="end" font-family="monospace" font-size="10" fill="var(--text-dim)">${fmtMoneyShort(v)}</text>`;
+    svg += `<text x="${padLeft-8}" y="${y+3}" text-anchor="end" font-family="monospace" font-size="10" fill="var(--text-dim)">${Math.round(v)}</text>`;
   }
 
-  // Barras: Facturado
+  // Barras: OR Cerradas (cantidad de órdenes, no monto)
   const centros = [];
   datosPorMes.forEach((d, i) => {
     const xCentro = padLeft + step*i + step/2;
     centros.push(xCentro);
     const x = xCentro - barW/2;
-    const facturadoH = plotH - yScale(d.Facturado);
-    const yFacturado = padTop + plotH - facturadoH;
-    svg += `<rect x="${x}" y="${yFacturado}" width="${barW}" height="${Math.max(facturadoH,0)}" rx="3" fill="var(--green)"><title>${d.nombre}: Facturado ${fmtMoney(d.Facturado)}</title></rect>`;
+    const cerradasH = plotH - yScale(d.Cerradas);
+    const yCerradas = padTop + plotH - cerradasH;
+    svg += `<rect x="${x}" y="${yCerradas}" width="${barW}" height="${Math.max(cerradasH,0)}" rx="3" fill="var(--green)"><title>${d.nombre}: ${d.Cerradas} OR cerradas</title></rect>`;
+    if (d.Cerradas > 0) {
+      svg += `<text x="${xCentro}" y="${yCerradas-6}" text-anchor="middle" font-family="monospace" font-size="11" font-weight="700" fill="var(--text)">${d.Cerradas}</text>`;
+    }
     svg += `<text x="${xCentro}" y="${height-padBottom+16}" text-anchor="middle" font-family="monospace" font-size="10" fill="var(--text-dim)">${d.nombre}</text>`;
   });
 
-  // Línea: Cobrado, pasando por encima de las barras
+  // Línea: OR Cobradas, pasando por encima de las barras
   const puntos = datosPorMes.map((d, i) => {
-    const y = padTop + yScale(d.Cobrado);
+    const y = padTop + yScale(d.Cobradas);
     return `${centros[i]},${y}`;
   });
   svg += `<polyline points="${puntos.join(' ')}" fill="none" stroke="rgb(0,0,225)" stroke-width="2.5"></polyline>`;
   datosPorMes.forEach((d, i) => {
-    const y = padTop + yScale(d.Cobrado);
-    const coincide = Math.abs(d.Facturado - d.Cobrado) < 1;
+    const y = padTop + yScale(d.Cobradas);
+    const coincide = d.Cobradas >= d.Cerradas;
     const colorPunto = coincide ? 'rgb(0,204,0)' : 'rgb(255,0,0)';
-    svg += `<circle cx="${centros[i]}" cy="${y}" r="4" fill="${colorPunto}" stroke="var(--bg)" stroke-width="1.5"><title>${d.nombre}: Cobrado ${fmtMoney(d.Cobrado)}</title></circle>`;
+    svg += `<circle cx="${centros[i]}" cy="${y}" r="4" fill="${colorPunto}" stroke="var(--bg)" stroke-width="1.5"><title>${d.nombre}: ${d.Cobradas} OR cobradas</title></circle>`;
   });
 
   svg += `</svg>`;
@@ -1067,13 +1080,13 @@ function renderGraficoAnual(anio){
   // Tabla debajo del gráfico
   const tbody = document.getElementById('detalleAnioTablaBody');
   tbody.innerHTML = datosPorMes.map(d => {
-    const diferencia = round2(d.Facturado - d.Cobrado);
+    const diferencia = d.Cerradas - d.Cobradas;
     return `
       <tr>
         <td>${d.nombre} ${anio}</td>
-        <td>${fmtMoney(d.Facturado)}</td>
-        <td>${fmtMoney(d.Cobrado)}</td>
-        <td class="pend-cell ${diferencia > 0 ? '' : 'zero'}">${fmtMoney(diferencia)}</td>
+        <td>${d.Cerradas}</td>
+        <td>${d.Cobradas}</td>
+        <td class="pend-cell ${diferencia > 0 ? '' : 'zero'}">${diferencia}</td>
       </tr>
     `;
   }).join('');
