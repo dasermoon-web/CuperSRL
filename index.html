@@ -632,7 +632,7 @@ function procesarDatos(docs){
       if (!cierresMap[mesCierre]) cierresMap[mesCierre] = { Mes: mesCierre, CantidadCerradas: 0, ImporteCerrado: 0, ImporteCobrado: 0 };
       cierresMap[mesCierre].CantidadCerradas += 1;
       cierresMap[mesCierre].ImporteCerrado += (rec.total || 0);
-      if (!rec.facturaImpaga) cierresMap[mesCierre].ImporteCobrado += (rec.total || 0); // col. AG = "NO" → sin cobrar
+      if (rec.fechaCobro && !rec.facturaImpaga) cierresMap[mesCierre].ImporteCobrado += (rec.total || 0); // col. AG "NO" o vacía → sin cobrar
     }
 
     if (!rec.fechaCierre || rec.fechaCierre === 'N') {
@@ -1157,7 +1157,7 @@ function mostrarOrdenesDelMes(mesKey, label){
   document.getElementById('detalleMesOrdenesTitulo').textContent = `OR cerradas — ${label} (${ordenes.length})`;
   document.getElementById('detalleMesOrdenesBody').innerHTML = ordenes.length
     ? ordenes.map(o => {
-        const cobrada = !o.facturaImpaga;
+        const cobrada = !!o.fechaCobro && !o.facturaImpaga;
         return `
           <tr>
             <td>${o.orden}</td>
@@ -1224,7 +1224,7 @@ document.getElementById('btnExportarMesOrdenes').addEventListener('click', async
     let filaActual = filaHeader + 1;
     let total = 0;
     lista.forEach(o => {
-      const cobrada = !o.facturaImpaga;
+      const cobrada = !!o.fechaCobro && !o.facturaImpaga;
       const fila = sheet.getRow(filaActual);
       fila.values = [
         o.orden,
