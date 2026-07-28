@@ -264,13 +264,13 @@
             <select id="detalleAnioSelector" style="background:var(--panel-2); border:1px solid var(--line); color:var(--text); padding:8px 12px; border-radius:5px; font-family:var(--mono); font-size:13px;"></select>
           </div>
           <div class="legend-mini" style="margin-bottom:10px;">
-            <span><span class="dot" style="background:var(--green)"></span>OR Cerradas</span>
-            <span><span class="dot" style="background:rgb(0,0,225)"></span>OR Cobradas</span>
+            <span><span class="dot" style="background:var(--green)"></span>Importe OR Cerradas</span>
+            <span><span class="dot" style="background:rgb(0,0,225)"></span>Importe Cobrado</span>
           </div>
           <div id="detalleChartScroll" style="overflow-x:auto;"></div>
           <div style="max-height:340px; overflow-y:auto; margin-top:18px;">
             <table>
-              <thead><tr><th>Mes</th><th>Cerradas</th><th>Cobradas</th><th>Diferencia</th></tr></thead>
+              <thead><tr><th>Mes</th><th>Importe Cerrado</th><th>Importe Cobrado</th><th>Diferencia</th></tr></thead>
               <tbody id="detalleAnioTablaBody"></tbody>
             </table>
           </div>
@@ -608,9 +608,10 @@ function procesarDatos(docs){
     // --- OR Cerradas / OR Cobradas (col. A = fecha de cierre, col. O = pendienteCobro) ---
     if (rec.fechaCierre && rec.fechaCierre !== 'N') {
       const mesCierre = rec.fechaCierre.slice(0,7);
-      if (!cierresMap[mesCierre]) cierresMap[mesCierre] = { Mes: mesCierre, Cerradas: 0, Cobradas: 0 };
-      cierresMap[mesCierre].Cerradas += 1;
-      if (!rec.pendienteCobro) cierresMap[mesCierre].Cobradas += 1; // col. O = "N" → se cobró de algún modo
+      if (!cierresMap[mesCierre]) cierresMap[mesCierre] = { Mes: mesCierre, CantidadCerradas: 0, ImporteCerrado: 0, ImporteCobrado: 0 };
+      cierresMap[mesCierre].CantidadCerradas += 1;
+      cierresMap[mesCierre].ImporteCerrado += (rec.total || 0);
+      if (!rec.pendienteCobro) cierresMap[mesCierre].ImporteCobrado += (rec.total || 0); // col. O = "N" → se cobró de algún modo
     }
 
     if (!rec.fechaCierre || rec.fechaCierre === 'N') {
@@ -685,7 +686,7 @@ function renderKPIs(){
 
   const kpiRow = document.getElementById('kpi-row');
   const kpis = [
-    { tipo: 'detalleMensual', label: 'Detalle general', value: '📊 Ver', color:'blue', icon:'chart', sub:'OR cerradas vs. OR cobradas' },
+    { tipo: 'detalleMensual', label: 'Detalle general', value: 'Ver', color:'blue', icon:'chart', sub:'OR cerradas vs. OR cobradas' },
     { tipo: 'facturado', label: `Facturado — ${monthLabel(last.Mes)}`, value: fmtMoney(last.Facturado), color:'blue', icon:'money', sub:'Total facturado del mes' },
     { tipo: 'conciliado', label: `Conciliado — ${monthLabel(last.Mes)}`, value: fmtMoney(last.Conciliado), color:'teal', icon:'check', sub:'Conciliado sin factura' },
     { tipo: 'pendFacturacion', label: 'Pendiente de facturación', value: fmtMoney(totalPendFacturacion), color: totalPendFacturacion>0 ? 'red':'green', icon:'clock', sub: totalPendFacturacion>0 ? 'Requieren facturar' : 'Todo al día' },
@@ -1022,10 +1023,15 @@ function renderGraficoAnual(anio){
   const datosPorMes = NOMBRES_MES.map((nombre, i) => {
     const mesKey = `${anio}-${String(i+1).padStart(2,'0')}`;
     const encontrado = monthlyCierres.find(r => r.Mes === mesKey);
-    return { nombre, Cerradas: encontrado ? encontrado.Cerradas : 0, Cobradas: encontrado ? encontrado.Cobradas : 0 };
+    return {
+      nombre,
+      Cantidad: encontrado ? encontrado.CantidadCerradas : 0,
+      ImporteCerrado: encontrado ? encontrado.ImporteCerrado : 0,
+      ImporteCobrado: encontrado ? encontrado.ImporteCobrado : 0,
+    };
   });
 
-  const height = 320, padTop = 28, padBottom = 32, padLeft = 44, padRight = 20;
+  const height = 320, padTop = 28, padBottom = 32, padLeft = 60, padRight = 20;
   const plotH = height - padTop - padBottom;
   const contenedor = document.getElementById('detalleChartScroll');
   const width = Math.max(contenedor.clientWidth || 900, 320);
@@ -1033,8 +1039,9 @@ function renderGraficoAnual(anio){
   const step = plotW / 12;
   const barW = Math.min(46, step * 0.55);
 
-  const maxVal = Math.max(1, ...datosPorMes.map(d => Math.max(d.Cerradas, d.Cobradas)));
-  const niceMax = Math.ceil(maxVal * 1.15);
+  const maxVal = Math.max(1, ...datosPorMes.map(d => Math.max(d.ImporteCerrado, d.ImporteCobrado)));
+  const magnitude = Math.pow(10, Math.floor(Math.log10(maxVal)));
+  const niceMax = Math.ceil(maxVal / (magnitude/2)) * (magnitude/2);
   const yScale = (v) => plotH - (v / niceMax) * plotH;
 
   let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" height="${height}" preserveAspectRatio="none">`;
@@ -1043,35 +1050,35 @@ function renderGraficoAnual(anio){
     const v = niceMax * i / 4;
     const y = padTop + yScale(v);
     svg += `<line x1="${padLeft}" y1="${y}" x2="${width-padRight}" y2="${y}" stroke="rgba(255,255,255,0.06)"></line>`;
-    svg += `<text x="${padLeft-8}" y="${y+3}" text-anchor="end" font-family="monospace" font-size="10" fill="var(--text-dim)">${Math.round(v)}</text>`;
+    svg += `<text x="${padLeft-8}" y="${y+3}" text-anchor="end" font-family="monospace" font-size="10" fill="var(--text-dim)">${fmtMoneyShort(v)}</text>`;
   }
 
-  // Barras: OR Cerradas (cantidad de órdenes, no monto)
+  // Barras: importe de OR Cerradas, con la cantidad de OR como etiqueta arriba
   const centros = [];
   datosPorMes.forEach((d, i) => {
     const xCentro = padLeft + step*i + step/2;
     centros.push(xCentro);
     const x = xCentro - barW/2;
-    const cerradasH = plotH - yScale(d.Cerradas);
-    const yCerradas = padTop + plotH - cerradasH;
-    svg += `<rect x="${x}" y="${yCerradas}" width="${barW}" height="${Math.max(cerradasH,0)}" rx="3" fill="var(--green)"><title>${d.nombre}: ${d.Cerradas} OR cerradas</title></rect>`;
-    if (d.Cerradas > 0) {
-      svg += `<text x="${xCentro}" y="${yCerradas-6}" text-anchor="middle" font-family="monospace" font-size="11" font-weight="700" fill="var(--text)">${d.Cerradas}</text>`;
+    const cerradoH = plotH - yScale(d.ImporteCerrado);
+    const yCerrado = padTop + plotH - cerradoH;
+    svg += `<rect x="${x}" y="${yCerrado}" width="${barW}" height="${Math.max(cerradoH,0)}" rx="3" fill="var(--green)"><title>${d.nombre}: ${d.Cantidad} OR por ${fmtMoney(d.ImporteCerrado)}</title></rect>`;
+    if (d.Cantidad > 0) {
+      svg += `<text x="${xCentro}" y="${yCerrado-6}" text-anchor="middle" font-family="monospace" font-size="11" font-weight="700" fill="var(--text)">OR ${d.Cantidad}</text>`;
     }
     svg += `<text x="${xCentro}" y="${height-padBottom+16}" text-anchor="middle" font-family="monospace" font-size="10" fill="var(--text-dim)">${d.nombre}</text>`;
   });
 
-  // Línea: OR Cobradas, pasando por encima de las barras
+  // Línea: importe cobrado de esas OR, pasando por encima de las barras
   const puntos = datosPorMes.map((d, i) => {
-    const y = padTop + yScale(d.Cobradas);
+    const y = padTop + yScale(d.ImporteCobrado);
     return `${centros[i]},${y}`;
   });
   svg += `<polyline points="${puntos.join(' ')}" fill="none" stroke="rgb(0,0,225)" stroke-width="2.5"></polyline>`;
   datosPorMes.forEach((d, i) => {
-    const y = padTop + yScale(d.Cobradas);
-    const coincide = d.Cobradas >= d.Cerradas;
+    const y = padTop + yScale(d.ImporteCobrado);
+    const coincide = Math.abs(d.ImporteCerrado - d.ImporteCobrado) < 1;
     const colorPunto = coincide ? 'rgb(0,204,0)' : 'rgb(255,0,0)';
-    svg += `<circle cx="${centros[i]}" cy="${y}" r="4" fill="${colorPunto}" stroke="var(--bg)" stroke-width="1.5"><title>${d.nombre}: ${d.Cobradas} OR cobradas</title></circle>`;
+    svg += `<circle cx="${centros[i]}" cy="${y}" r="4" fill="${colorPunto}" stroke="var(--bg)" stroke-width="1.5"><title>${d.nombre}: Cobrado ${fmtMoney(d.ImporteCobrado)}</title></circle>`;
   });
 
   svg += `</svg>`;
@@ -1080,13 +1087,13 @@ function renderGraficoAnual(anio){
   // Tabla debajo del gráfico
   const tbody = document.getElementById('detalleAnioTablaBody');
   tbody.innerHTML = datosPorMes.map(d => {
-    const diferencia = d.Cerradas - d.Cobradas;
+    const diferencia = round2(d.ImporteCerrado - d.ImporteCobrado);
     return `
       <tr>
         <td>${d.nombre} ${anio}</td>
-        <td>${d.Cerradas}</td>
-        <td>${d.Cobradas}</td>
-        <td class="pend-cell ${diferencia > 0 ? '' : 'zero'}">${diferencia}</td>
+        <td>${fmtMoney(d.ImporteCerrado)}</td>
+        <td>${fmtMoney(d.ImporteCobrado)}</td>
+        <td class="pend-cell ${diferencia > 0 ? '' : 'zero'}">${fmtMoney(diferencia)}</td>
       </tr>
     `;
   }).join('');
