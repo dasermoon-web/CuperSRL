@@ -256,6 +256,8 @@
           </div>
         </div>
 
+        <div id="detalleKpiCaption" style="display:none; background:var(--panel-2); border:1px solid var(--line); border-radius:6px; padding:10px 14px; margin-bottom:14px; font-size:12px; color:var(--text-dim); line-height:1.6;"></div>
+
         <div id="detalleKpiTablaWrap" style="max-height:420px; overflow-y:auto;">
           <table>
             <thead id="detalleKpiThead"><tr><th>Orden</th><th style="text-align:left;">Cliente</th><th style="text-align:left;">Vehículo</th><th>Fecha</th><th>Importe</th></tr></thead>
@@ -271,6 +273,10 @@
           <div class="legend-mini" style="margin-bottom:10px;">
             <span><span class="dot" style="background:var(--green)"></span>Importe OR Cerradas</span>
             <span><span class="dot" style="background:rgb(0,0,225)"></span>Importe Cobrado</span>
+          </div>
+          <div style="background:var(--panel-2); border:1px solid var(--line); border-radius:6px; padding:10px 14px; margin-bottom:16px; font-size:12px; color:var(--text-dim); line-height:1.6;">
+            <div><strong style="color:var(--green);">OR Cerradas:</strong> todas las órdenes que se cerraron en el mes.</div>
+            <div><strong style="color:rgb(90,120,255);">OR Cobradas:</strong> de esas órdenes, las que ya fueron cobradas por algún medio (factura o conciliado).</div>
           </div>
           <div id="detalleChartScroll" style="overflow-x:auto;"></div>
           <div style="max-height:340px; overflow-y:auto; margin-top:18px;">
@@ -702,7 +708,7 @@ function renderKPIs(){
 
   const hoy = new Date();
   const mesActualStr = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`;
-  cobradasEsteMes = todosLosDocs.filter(rec => rec.fechaCobro && rec.fechaCobro !== 'SI' && rec.fechaCobro.slice(0,7) === mesActualStr && rec.total);
+  cobradasEsteMes = todosLosDocs.filter(rec => rec.fechaCobro && rec.fechaCobro !== 'SI' && rec.fechaCobro.slice(0,7) === mesActualStr && rec.total && rec.facNro && rec.facNro !== '');
   const totalCobradasEsteMes = cobradasEsteMes.reduce((a,r)=>a + (r.total||0), 0);
 
   const kpiRow = document.getElementById('kpi-row');
@@ -743,6 +749,7 @@ function cerrarDetalleKPI(){
   document.querySelectorAll('#kpi-row .kpi').forEach(el => el.style.boxShadow = '');
   document.getElementById('detalleMesOrdenesWrap').style.display = 'none';
   mesOrdenesActivo = null;
+  document.getElementById('detalleKpiCaption').style.display = 'none';
 }
 document.getElementById('detalleKpiCerrar').addEventListener('click', cerrarDetalleKPI);
 
@@ -809,6 +816,14 @@ function mostrarDetalleKPI(tipo, color){
   }
 
   document.getElementById('detalleKpiTitulo').textContent = `${titulo} (${lista.length})`;
+
+  const caption = document.getElementById('detalleKpiCaption');
+  if (tipo === 'conciliado') {
+    caption.textContent = 'OR cobradas en el mes mencionado sin factura o conciliadas.';
+    caption.style.display = 'block';
+  } else {
+    caption.style.display = 'none';
+  }
 
   detalleSortField = null;
   detalleSortDir = 'asc';
@@ -988,7 +1003,7 @@ document.getElementById('btnExportarExcel').addEventListener('click', async () =
         fmtISOaDDMMAA(o.fechaFact),
         o.total || 0,
       ];
-      fila.getCell(7).numFmt = '$ #,##0.00';
+      fila.getCell(7).numFmt = '$ #,##0';
       fila.eachCell(cell => {
         cell.border = { bottom: { style: 'hair', color: { argb: 'FFE0E0E0' } } };
       });
@@ -1002,7 +1017,7 @@ document.getElementById('btnExportarExcel').addEventListener('click', async () =
     filaTotal.getCell(6).font = { bold: true };
     filaTotal.getCell(6).alignment = { horizontal: 'right' };
     filaTotal.getCell(7).value = total;
-    filaTotal.getCell(7).numFmt = '$ #,##0.00';
+    filaTotal.getCell(7).numFmt = '$ #,##0';
     filaTotal.getCell(7).font = { bold: true, color: { argb: 'FF1F4D37' } };
     filaTotal.eachCell(cell => {
       cell.border = { top: { style: 'thin', color: { argb: 'FF1F4D37' } } };
@@ -1235,7 +1250,7 @@ document.getElementById('btnExportarMesOrdenes').addEventListener('click', async
         o.total || 0,
         cobrada ? 'Sí' : 'No',
       ];
-      fila.getCell(6).numFmt = '$ #,##0.00';
+      fila.getCell(6).numFmt = '$ #,##0';
       fila.getCell(7).font = { color: { argb: cobrada ? 'FF2E7D4F' : 'FFB3372C' }, bold: true };
       fila.eachCell(cell => {
         cell.border = { bottom: { style: 'hair', color: { argb: 'FFE0E0E0' } } };
@@ -1249,7 +1264,7 @@ document.getElementById('btnExportarMesOrdenes').addEventListener('click', async
     filaTotal.getCell(5).font = { bold: true };
     filaTotal.getCell(5).alignment = { horizontal: 'right' };
     filaTotal.getCell(6).value = total;
-    filaTotal.getCell(6).numFmt = '$ #,##0.00';
+    filaTotal.getCell(6).numFmt = '$ #,##0';
     filaTotal.getCell(6).font = { bold: true, color: { argb: 'FF1F4D37' } };
     filaTotal.eachCell(cell => {
       cell.border = { top: { style: 'thin', color: { argb: 'FF1F4D37' } } };
