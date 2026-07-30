@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Backup de la base — Cuper SRL</title>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<style>
+  body{ font-family:'Segoe UI',sans-serif; background:#16181a; color:#eef1ee; padding:40px; max-width:640px; margin:0 auto; }
+  h1{ color:#47b27a; font-size:20px; }
+  p{ color:#c7cdc7; font-size:14px; line-height:1.5; }
+  input{
+    width:100%; background:#232924; border:1px solid #313a33; color:#eef1ee;
+    padding:10px 12px; border-radius:5px; font-size:14px; margin-bottom:10px;
+  }
+  button{
+    background:#47b27a; color:#0f1211; border:none; padding:12px 22px;
+    border-radius:6px; font-weight:700; cursor:pointer; font-size:14px; margin-top:6px; margin-right:8px;
+  }
+  button:disabled{ background:#313a33; color:#90998f; cursor:not-allowed; }
+  #log{
+    margin-top:20px; background:#1c211e; border:1px solid #313a33; border-radius:6px;
+    padding:14px 16px; font-family:'JetBrains Mono',monospace; font-size:13px; white-space:pre-line;
+    max-height:340px; overflow-y:auto;
+  }
+  .warn{ color:#e2574c; }
+  .ok{ color:#47b27a; }
+  #loginBox{ background:#1c211e; border:1px solid #313a33; border-radius:8px; padding:22px; margin-top:20px; }
+  #exportBox{ display:none; }
+</style>
+</head>
+<body>
+  <h1>💾 Backup completo de la base — Cuper SRL</h1>
+  <p>Descarga una copia de todo lo que hay hoy en Firestore: las colecciones <code>ordenes</code> y <code>reparaciones</code>.
+  Te genera 3 archivos: dos JSON (uno por colección, para restaurar si hiciera falta) y un Excel de "ordenes"
+  para revisar a simple vista, todo tal cual está en este momento.</p>
+
+  <div id="loginBox">
+    <label>Usuario</label>
+    <input type="text" id="loginUser" placeholder="admin">
+    <label>Contraseña</label>
+    <input type="password" id="loginPass" placeholder="••••••••">
+    <button id="btnLogin">Ingresar</button>
+    <div id="loginMsg" style="margin-top:10px; font-size:13px;"></div>
+  </div>
+
+  <div id="exportBox">
+    <button id="btnExport">Descargar backup completo</button>
+    <div id="log"></div>
+  </div>
+
+  <script src="firebase-config.js"></script>
+  <script>
+    const loginBox = document.getElementById('loginBox');
+    const exportBox = document.getElementById('exportBox');
+    const loginMsg = document.getElementById('loginMsg');
+
+    document.getElementById('btnLogin').addEventListener('click', async () => {
+      const u = document.getElementById('loginUser').value.trim().toLowerCase();
+      const p = document.getElementById('loginPass').value;
+      const email = u.includes('@') ? u : u + '@cupersrl.local';
+      loginMsg.textContent = 'Ingresando...';
+      loginMsg.style.color = '#90998f';
+      try {
+        await firebase.auth().signInWithEmailAndPassword(email, p);
+      } catch (err) {
+        loginMsg.textContent = 'Usuario o contraseña incorrectos.';
+        loginMsg.style.color = '#e2574c';
+      }
+    });
+
+    firebase.auth().onAuthStateChanged((user) => {
+      if (user) {
+        loginBox.style.display = 'none';
+        exportBox.style.display = 'block';
+      } else {
+        loginBox.style.display = 'block';
+        exportBox.style.display = 'none';
+      }
+    });
+
+    const logEl = document.getElementById('log');
+    const btn = document.getElementById('btnExport');
+    function log(msg, cls){
+      const line = document.createElement('div');
+      if (cls) line.className = cls;
+      line.textContent = msg;
+      logEl.appendChild(line);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function descargarJSON(datos, nombreArchivo){
+      const blob = new Blob([JSON.stringify(datos, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = nombreArchivo;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    async function descargarExcelOrdenes(ordenes, nombreArchivo){
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet('Ordenes');
+      const columnas = [
+        'orden','razonSocial','vehiculo','dominio','fechaIng','fechaCierre','total',
+        'fechaFact','condicion','facNro','facSN','fechaCobro','pendienteCobro','facturaImpaga'
+      ];
+      sheet.addRow(columnas).font = { bold: true };
+      ordenes.forEach(o => {
+        sheet.addRow(columnas.map(c => (o[c] === undefined ? '' : o[c])));
+      });
+      sheet.columns.forEach(col => { col.width = 16; });
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = nombreArchivo;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      logEl.innerHTML = '';
+      const hoy = new Date().toISOString().slice(0,10);
+      try {
+        log('Descargando colección "ordenes"...');
+        const snapOrdenes = await db.collection('ordenes').get();
+        const ordenes = snapOrdenes.docs.map(d => ({ id: d.id, ...d.data() }));
+        log(`✔ ${ordenes.length} órdenes descargadas.`, 'ok');
+
+        log('Descargando colección "reparaciones"...');
+        const snapReparaciones = await db.collection('reparaciones').get();
+        const reparaciones = snapReparaciones.docs.map(d => ({ id: d.id, ...d.data() }));
+        log(`✔ ${reparaciones.length} registros de reparaciones descargados.`, 'ok');
+
+        log('Generando archivos para descargar...');
+        descargarJSON(ordenes, `cupersrl_backup_ordenes_${hoy}.json`);
+        descargarJSON(reparaciones, `cupersrl_backup_reparaciones_${hoy}.json`);
+        await descargarExcelOrdenes(ordenes, `cupersrl_backup_ordenes_${hoy}.xlsx`);
+
+        log('✔ Listo. Deberías tener 3 descargas nuevas en tu carpeta de Descargas.', 'ok');
+        log('Guardalas en el pendrive junto con el resto del backup.', 'ok');
+      } catch (err) {
+        log('Error: ' + err.message, 'warn');
+        log('Revisá que firebase-config.js tenga tus datos reales y que tengas conexión.', 'warn');
+      }
+      btn.disabled = false;
+    });
+  </script>
+</body>
+</html>
