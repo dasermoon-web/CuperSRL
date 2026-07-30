@@ -245,6 +245,10 @@
     <div id="loadingMsg">Cargando datos desde Firestore...</div>
 
     <div id="content" style="display:none;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+        <label for="dashboardMesSelector" style="font-size:12px; color:var(--text-dim); text-transform:uppercase; letter-spacing:1px;">Ver mes:</label>
+        <select id="dashboardMesSelector" style="width:auto; min-width:140px;"></select>
+      </div>
       <div class="kpis" id="kpi-row"></div>
 
       <div class="panel" id="detalleKpiPanel" style="display:none;">
@@ -614,6 +618,7 @@ const fmtISOaDDMMAA = (isoStr) => {
 
 let monthlyData = [];
 let monthlyCierres = [];
+let dashboardMes = null;
 let openOrders = [];
 let pendientesFacturar = [];
 let pendientesCobroMarcados = [];
@@ -686,8 +691,29 @@ function render(){
     return;
   }
 
+  prepararSelectorMesDashboard();
   renderKPIs();
   cerrarDetalleKPI();
+}
+
+function prepararSelectorMesDashboard(){
+  const hoy = new Date();
+  const mesHoy = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`;
+  const meses = new Set([mesHoy]);
+  monthlyData.forEach(m => meses.add(m.Mes));
+  monthlyCierres.forEach(m => meses.add(m.Mes));
+  const listaMeses = [...meses].sort().reverse();
+
+  const sel = document.getElementById('dashboardMesSelector');
+  const valorPrevio = dashboardMes;
+  sel.innerHTML = listaMeses.map(m => `<option value="${m}">${monthLabel(m)}${m === mesHoy ? ' (actual)' : ''}</option>`).join('');
+  dashboardMes = (valorPrevio && listaMeses.includes(valorPrevio)) ? valorPrevio : mesHoy;
+  sel.value = dashboardMes;
+  sel.onchange = () => {
+    dashboardMes = sel.value;
+    renderKPIs();
+    cerrarDetalleKPI();
+  };
 }
 
 // ---- Colores e íconos de las tarjetas KPI (estilo neón) ----
@@ -706,24 +732,23 @@ function kpiIcon(kind){
 }
 
 function renderKPIs(){
-  const last = monthlyData[monthlyData.length-1] || { Mes: `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}`, Facturado: 0, Conciliado: 0 };
+  const mesRef = dashboardMes || `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}`;
+  const datosMes = monthlyData.find(m => m.Mes === mesRef) || { Mes: mesRef, Facturado: 0, Conciliado: 0 };
   const totalPendFacturar = pendientesFacturar.reduce((a,r)=>a + (r.total||0), 0);
   const totalPendFacturacion = pendientesCobroMarcados.reduce((a,r)=>a + (r.total||0), 0);
   const totalFacturasImpagas = facturasImpagas.reduce((a,r)=>a + (r.total||0), 0);
 
-  const hoy = new Date();
-  const mesActualStr = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`;
-  cobradasEsteMes = todosLosDocs.filter(rec => rec.fechaCobro && rec.fechaCobro !== 'SI' && rec.fechaCobro.slice(0,7) === mesActualStr && rec.total && rec.facNro && rec.facNro !== '');
+  cobradasEsteMes = todosLosDocs.filter(rec => rec.fechaCobro && rec.fechaCobro !== 'SI' && rec.fechaCobro.slice(0,7) === mesRef && rec.total && rec.facNro && rec.facNro !== '');
   const totalCobradasEsteMes = cobradasEsteMes.reduce((a,r)=>a + (r.total||0), 0);
 
   const kpiRow = document.getElementById('kpi-row');
   const kpis = [
     { tipo: 'detalleMensual', label: 'Detalle general', value: '', color:'orange', icon:'chart', sub:'OR cerradas vs. OR cobradas' },
-    { tipo: 'facturado', label: `Facturado — ${monthLabel(last.Mes)}`, value: fmtMoney(last.Facturado), color:'blue', icon:'money', sub:'Total facturado del mes' },
-    { tipo: 'conciliado', label: `Conciliado — ${monthLabel(last.Mes)}`, value: fmtMoney(last.Conciliado), color:'teal', icon:'check', sub:'Conciliado sin factura' },
+    { tipo: 'facturado', label: `Facturado — ${monthLabel(datosMes.Mes)}`, value: fmtMoney(datosMes.Facturado), color:'blue', icon:'money', sub:'Total facturado del mes' },
+    { tipo: 'conciliado', label: `Conciliado — ${monthLabel(datosMes.Mes)}`, value: fmtMoney(datosMes.Conciliado), color:'teal', icon:'check', sub:'Conciliado sin factura' },
     { tipo: 'pendFacturacion', label: 'Pendiente de facturación', value: fmtMoney(totalPendFacturacion), color: totalPendFacturacion>0 ? 'red':'green', icon:'clock', sub: totalPendFacturacion>0 ? 'Requieren facturar' : 'Todo al día' },
     { tipo: 'facturasImpagas', label: 'Facturas pendientes de pago', value: fmtMoney(totalFacturasImpagas), color: totalFacturasImpagas>0 ? 'red':'green', icon:'warn', sub: totalFacturasImpagas>0 ? 'Cobrar cuanto antes' : 'Sin deuda' },
-    { tipo: 'cobradasMes', label: 'Facturas cobradas en el mes', value: fmtMoney(totalCobradasEsteMes), color:'green', icon:'money', sub: monthLabel(mesActualStr) },
+    { tipo: 'cobradasMes', label: 'Facturas cobradas en el mes', value: fmtMoney(totalCobradasEsteMes), color:'green', icon:'money', sub: monthLabel(mesRef) },
     { tipo: 'abiertas', label: 'Órdenes abiertas ahora', value: openOrders.length, color:'yellow', icon:'door', sub:'En proceso de reparación' },
   ];
   kpiRow.innerHTML = kpis.map(k => `
@@ -788,18 +813,18 @@ function mostrarDetalleKPI(tipo, color){
   tablaWrap.style.display = 'block';
   chartWrap.style.display = 'none';
 
-  const last = monthlyData[monthlyData.length-1] || { Mes: `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}`, Facturado: 0, Conciliado: 0 };
+  const mesRef = dashboardMes || `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}`;
   let lista = [];
   let titulo = '';
   let fechaCol = (o) => (o.fechaCierre && o.fechaCierre !== 'N') ? o.fechaCierre : (o.fechaIng || '');
 
   if (tipo === 'facturado') {
-    lista = todosLosDocs.filter(r => r.fechaFact && r.fechaFact.slice(0,7) === last.Mes && categoria(r) === 'Facturado' && r.facNro && r.facNro !== '');
-    titulo = `Facturado — ${monthLabel(last.Mes)}`;
+    lista = todosLosDocs.filter(r => r.fechaFact && r.fechaFact.slice(0,7) === mesRef && categoria(r) === 'Facturado' && r.facNro && r.facNro !== '');
+    titulo = `Facturado — ${monthLabel(mesRef)}`;
     fechaCol = (o) => o.fechaFact;
   } else if (tipo === 'conciliado') {
-    lista = todosLosDocs.filter(r => r.fechaFact && r.fechaFact.slice(0,7) === last.Mes && categoria(r) === 'Conciliado');
-    titulo = `Conciliado — ${monthLabel(last.Mes)}`;
+    lista = todosLosDocs.filter(r => r.fechaFact && r.fechaFact.slice(0,7) === mesRef && categoria(r) === 'Conciliado');
+    titulo = `Conciliado — ${monthLabel(mesRef)}`;
     fechaCol = (o) => o.fechaFact;
   } else if (tipo === 'pendFacturacion') {
     lista = pendientesCobroMarcados;
@@ -810,7 +835,7 @@ function mostrarDetalleKPI(tipo, color){
     fechaCol = (o) => o.fechaFact;
   } else if (tipo === 'cobradasMes') {
     lista = cobradasEsteMes;
-    titulo = 'Facturas cobradas en el mes';
+    titulo = `Facturas cobradas — ${monthLabel(mesRef)}`;
     fechaCol = (o) => o.fechaCobro;
   } else if (tipo === 'pendFacturar') {
     lista = pendientesFacturar;
