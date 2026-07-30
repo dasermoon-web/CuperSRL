@@ -117,7 +117,7 @@
   .deudor-barra-bg{ height:4px; background:var(--line); border-radius:2px; margin-top:6px; overflow:hidden; }
   .deudor-barra-fill{ height:100%; background:#ff5c5c; }
 
-  .torta-wrap{ display:flex; align-items:center; gap:18px; flex-wrap:wrap; }
+  .torta-wrap{ display:flex; align-items:center; justify-content:center; gap:18px; flex-wrap:wrap; padding:10px 0; }
   .torta-leyenda{ font-size:12px; }
   .torta-leyenda div{ display:flex; align-items:center; gap:8px; margin-bottom:8px; }
   .torta-leyenda .dot{ width:10px; height:10px; border-radius:50%; display:inline-block; flex-shrink:0; }
@@ -291,14 +291,14 @@
       <div id="alertaMora"></div>
       <div class="kpis" id="kpi-row"></div>
 
-      <div class="dos-col-dashboard" style="display:grid; grid-template-columns:1.3fr 1fr; gap:16px; margin-top:16px;">
+      <div class="dos-col-dashboard" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:16px; margin-top:16px;">
         <div class="panel" style="margin:0;">
-          <div class="panel-head"><h2 style="font-size:14px;">🏆 Top 5 — Deudores</h2></div>
+          <div class="panel-head"><h2 style="font-size:14px;">⭐ Top 5 — Deudores</h2></div>
           <div class="panel-sub" style="margin:-6px 0 12px;">Pendiente de facturación + facturas impagas, de mayor a menor importe.</div>
           <div id="widgetTopDeudores"></div>
         </div>
         <div class="panel" style="margin:0;">
-          <div class="panel-head"><h2 style="font-size:14px;">🥧 OR del mes</h2></div>
+          <div class="panel-head"><h2 style="font-size:14px;">📊 OR del mes</h2></div>
           <div class="panel-sub" style="margin:-6px 0 12px;" id="widgetTortaSub"></div>
           <div id="widgetTortaOR"></div>
         </div>
@@ -940,9 +940,10 @@ function renderWidgetsDashboard(mesRef){
   const porCliente = {};
   porOrden.forEach(r => {
     const nombre = toTitleCase(r.razonSocial || 'Sin cliente');
-    if (!porCliente[nombre]) porCliente[nombre] = { nombre, total: 0, cantidad: 0 };
+    if (!porCliente[nombre]) porCliente[nombre] = { nombre, total: 0, cantidad: 0, detalle: [] };
     porCliente[nombre].total += (r.total || 0);
     porCliente[nombre].cantidad += 1;
+    porCliente[nombre].detalle.push(r);
   });
 
   const top5 = Object.values(porCliente).sort((a,b) => b.total - a.total).slice(0, 5);
@@ -950,7 +951,11 @@ function renderWidgetsDashboard(mesRef){
 
   const wrapDeudores = document.getElementById('widgetTopDeudores');
   wrapDeudores.innerHTML = top5.length
-    ? top5.map((d, i) => `
+    ? top5.map((d, i) => {
+        const tooltip = d.detalle
+          .map(r => `OR ${r.orden}  ·  Fac. ${r.facNro || r.facSN || 'sin factura'}  ·  ${fmtMoney(r.total||0)}`)
+          .join('\n');
+        return `
         <div class="deudor-row">
           <div class="deudor-rank">${i+1}</div>
           <div class="deudor-info">
@@ -958,9 +963,10 @@ function renderWidgetsDashboard(mesRef){
             <div class="detalle">${d.cantidad} OR pendiente${d.cantidad===1?'':'s'}</div>
             <div class="deudor-barra-bg"><div class="deudor-barra-fill" style="width:${Math.round((d.total/maxTotal)*100)}%;"></div></div>
           </div>
-          <div class="deudor-monto">${fmtMoney(d.total)}</div>
+          <div class="deudor-monto" title="${tooltip}" style="cursor:help;">${fmtMoney(d.total)}</div>
         </div>
-      `).join('')
+      `;
+      }).join('')
     : '<div style="color:var(--text-dim); font-size:13px; padding:8px 0;">Sin deuda pendiente. 🎉</div>';
 
   // ---- Widget: OR del mes (torta) ----
