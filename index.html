@@ -246,8 +246,9 @@
 
     <div id="content" style="display:none;">
       <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
-        <label for="dashboardMesSelector" style="font-size:12px; color:var(--text-dim); text-transform:uppercase; letter-spacing:1px;">Ver mes:</label>
-        <select id="dashboardMesSelector" style="width:auto; min-width:140px;"></select>
+        <button type="button" id="dashboardMesPrev" class="btn secondary" style="padding:6px 14px; font-size:16px; line-height:1;">‹</button>
+        <div id="dashboardMesLabel" style="font-family:var(--mono); font-size:14px; font-weight:700; min-width:110px; text-align:center;"></div>
+        <button type="button" id="dashboardMesNext" class="btn secondary" style="padding:6px 14px; font-size:16px; line-height:1;">›</button>
       </div>
       <div class="kpis" id="kpi-row"></div>
 
@@ -599,6 +600,15 @@ const monthLabel = (m) => {
   if (idx < 0 || idx > 11) return '⚠ mes inválido';
   return names[idx] + " '" + y.slice(2);
 };
+const monthLabelFull = (m) => {
+  const match = (m||'').match(/^(\d{4})-(\d{2})/);
+  if (!match) return '—';
+  const [, y, mo] = match;
+  const idx = parseInt(mo, 10) - 1;
+  const names = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  if (idx < 0 || idx > 11) return '—';
+  return names[idx] + ' ' + y;
+};
 const fmtFechaDDMMAA = (d) => {
   if (!d) return '—';
   const dd = String(d.getDate()).padStart(2,'0');
@@ -702,17 +712,35 @@ function prepararSelectorMesDashboard(){
   const meses = new Set([mesHoy]);
   monthlyData.forEach(m => meses.add(m.Mes));
   monthlyCierres.forEach(m => meses.add(m.Mes));
-  const listaMeses = [...meses].sort().reverse();
+  const listaMeses = [...meses].sort(); // ascendente: el más viejo primero
 
-  const sel = document.getElementById('dashboardMesSelector');
-  const valorPrevio = dashboardMes;
-  sel.innerHTML = listaMeses.map(m => `<option value="${m}">${monthLabel(m)}${m === mesHoy ? ' (actual)' : ''}</option>`).join('');
-  dashboardMes = (valorPrevio && listaMeses.includes(valorPrevio)) ? valorPrevio : mesHoy;
-  sel.value = dashboardMes;
-  sel.onchange = () => {
-    dashboardMes = sel.value;
-    renderKPIs();
-    cerrarDetalleKPI();
+  if (!dashboardMes || !listaMeses.includes(dashboardMes)) dashboardMes = mesHoy;
+
+  const pintar = () => {
+    document.getElementById('dashboardMesLabel').textContent = monthLabelFull(dashboardMes);
+    const idx = listaMeses.indexOf(dashboardMes);
+    document.getElementById('dashboardMesPrev').disabled = (idx <= 0);
+    document.getElementById('dashboardMesNext').disabled = (idx === -1 || idx >= listaMeses.length - 1);
+  };
+  pintar();
+
+  document.getElementById('dashboardMesPrev').onclick = () => {
+    const idx = listaMeses.indexOf(dashboardMes);
+    if (idx > 0) {
+      dashboardMes = listaMeses[idx - 1];
+      pintar();
+      renderKPIs();
+      cerrarDetalleKPI();
+    }
+  };
+  document.getElementById('dashboardMesNext').onclick = () => {
+    const idx = listaMeses.indexOf(dashboardMes);
+    if (idx !== -1 && idx < listaMeses.length - 1) {
+      dashboardMes = listaMeses[idx + 1];
+      pintar();
+      renderKPIs();
+      cerrarDetalleKPI();
+    }
   };
 }
 
