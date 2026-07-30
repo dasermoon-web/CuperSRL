@@ -774,9 +774,9 @@ function renderKPIs(){
     { tipo: 'detalleMensual', label: 'Detalle general', value: '', color:'orange', icon:'chart', sub:'OR cerradas vs. OR cobradas' },
     { tipo: 'facturado', label: `Facturado — ${monthLabel(datosMes.Mes)}`, value: fmtMoney(datosMes.Facturado), color:'blue', icon:'money', sub:'Total facturado del mes' },
     { tipo: 'conciliado', label: `Conciliado — ${monthLabel(datosMes.Mes)}`, value: fmtMoney(datosMes.Conciliado), color:'teal', icon:'check', sub:'Conciliado sin factura' },
+    { tipo: 'cobradasMes', label: 'Facturas cobradas en el mes', value: fmtMoney(totalCobradasEsteMes), color:'green', icon:'money', sub: monthLabel(mesRef) },
     { tipo: 'pendFacturacion', label: 'Pendiente de facturación', value: fmtMoney(totalPendFacturacion), color: totalPendFacturacion>0 ? 'red':'green', icon:'clock', sub: totalPendFacturacion>0 ? 'Requieren facturar' : 'Todo al día' },
     { tipo: 'facturasImpagas', label: 'Facturas pendientes de pago', value: fmtMoney(totalFacturasImpagas), color: totalFacturasImpagas>0 ? 'red':'green', icon:'warn', sub: totalFacturasImpagas>0 ? 'Cobrar cuanto antes' : 'Sin deuda' },
-    { tipo: 'cobradasMes', label: 'Facturas cobradas en el mes', value: fmtMoney(totalCobradasEsteMes), color:'green', icon:'money', sub: monthLabel(mesRef) },
     { tipo: 'abiertas', label: 'Órdenes abiertas ahora', value: openOrders.length, color:'yellow', icon:'door', sub:'En proceso de reparación' },
   ];
   kpiRow.innerHTML = kpis.map(k => `
