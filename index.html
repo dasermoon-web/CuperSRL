@@ -107,6 +107,21 @@
   }
   .alerta-mora button:hover{ background:rgba(255,92,92,.12); }
 
+  .deudor-row{ display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--line); }
+  .deudor-row:last-child{ border-bottom:none; }
+  .deudor-rank{ font-family:var(--mono); color:var(--text-dim); width:18px; flex-shrink:0; }
+  .deudor-info{ flex:1; min-width:0; }
+  .deudor-info .nombre{ font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .deudor-info .detalle{ font-size:11px; color:var(--text-dim); }
+  .deudor-monto{ font-family:var(--mono); font-weight:700; color:#ff8f8f; white-space:nowrap; }
+  .deudor-barra-bg{ height:4px; background:var(--line); border-radius:2px; margin-top:6px; overflow:hidden; }
+  .deudor-barra-fill{ height:100%; background:#ff5c5c; }
+
+  .torta-wrap{ display:flex; align-items:center; gap:18px; flex-wrap:wrap; }
+  .torta-leyenda{ font-size:12px; }
+  .torta-leyenda div{ display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .torta-leyenda .dot{ width:10px; height:10px; border-radius:50%; display:inline-block; flex-shrink:0; }
+
   .kpi.c-red{ border-color:rgba(255,92,92,.35); background:radial-gradient(120% 120% at 18% 0%, rgba(255,92,92,.12), var(--panel) 65%); }
   .kpi.c-red .icon{ color:#ff5c5c; background:rgba(255,92,92,.14); }
   .kpi.c-red .label{ color:#ff8f8f; }
@@ -275,6 +290,19 @@
       </div>
       <div id="alertaMora"></div>
       <div class="kpis" id="kpi-row"></div>
+
+      <div class="dos-col-dashboard" style="display:grid; grid-template-columns:1.3fr 1fr; gap:16px; margin-top:16px;">
+        <div class="panel" style="margin:0;">
+          <div class="panel-head"><h2 style="font-size:14px;">🏆 Top 5 — Deudores</h2></div>
+          <div class="panel-sub" style="margin:-6px 0 12px;">Pendiente de facturación + facturas impagas, de mayor a menor importe.</div>
+          <div id="widgetTopDeudores"></div>
+        </div>
+        <div class="panel" style="margin:0;">
+          <div class="panel-head"><h2 style="font-size:14px;">🥧 OR del mes</h2></div>
+          <div class="panel-sub" style="margin:-6px 0 12px;" id="widgetTortaSub"></div>
+          <div id="widgetTortaOR"></div>
+        </div>
+      </div>
 
       <div class="panel" id="detalleKpiPanel" style="display:none;">
         <div class="panel-head">
@@ -662,7 +690,7 @@ function deltaHtml(actual, prev){
   const pct = ((actual - prev) / prev) * 100;
   if (Math.abs(pct) < 0.5) return '';
   const sube = pct >= 0;
-  return `<span class="delta ${sube ? 'up' : 'down'}">${sube ? '▲' : '▼'} ${Math.abs(Math.round(pct))}%</span>`;
+  return `<span class="delta ${sube ? 'up' : 'down'}">${sube ? '▲' : '▼'} ${Math.abs(Math.round(pct))}%</span><span style="font-size:10px; color:var(--text-dim);">contra el mes anterior</span>`;
 }
 const fmtFechaDDMMAA = (d) => {
   if (!d) return '—';
@@ -844,15 +872,12 @@ function renderKPIs(){
   const conciliadoTrend = mesesTrend.map(m => (monthlyData.find(x => x.Mes === m) || {}).Conciliado || 0);
   const cobradasTrend = mesesTrend.map(m => cobradasPorMes[m] || 0);
 
-  // --- Alerta de mora: facturas impagas hace más de 60 días ---
+  // --- Alerta de mora: facturas impagas hace más de 40 días (según fecha de factura) ---
   const HOY_MS = Date.now();
-  const MORA_DIAS = 60;
-  const facturasEnMora = facturasImpagas.filter(r => {
-    const fechaRef = r.fechaFact || r.fechaCierre;
-    if (!fechaRef || fechaRef === 'N') return false;
-    const dias = (HOY_MS - new Date(fechaRef).getTime()) / 86400000;
-    return dias >= MORA_DIAS;
-  });
+  const MORA_DIAS = 40;
+  const facturasEnMora = facturasImpagas
+    .filter(r => r.fechaFact && r.fechaFact !== '' && (HOY_MS - new Date(r.fechaFact).getTime()) / 86400000 >= MORA_DIAS)
+    .sort((a,b) => new Date(a.fechaFact) - new Date(b.fechaFact)); // más antigua primero
   const alertaEl = document.getElementById('alertaMora');
   if (facturasEnMora.length > 0) {
     const totalMora = facturasEnMora.reduce((a,r) => a + (r.total||0), 0);
@@ -900,6 +925,86 @@ function renderKPIs(){
   kpiRow.querySelectorAll('.kpi').forEach(el => {
     el.addEventListener('click', () => mostrarDetalleKPI(el.dataset.tipo, el.dataset.color));
   });
+
+  renderWidgetsDashboard(mesRef);
+}
+
+// ---- Widget: Top 5 deudores ----
+function renderWidgetsDashboard(mesRef){
+  const porOrden = new Map();
+  [...pendientesCobroMarcados, ...facturasImpagas].forEach(r => {
+    if (!r.total) return;
+    if (!porOrden.has(r.orden)) porOrden.set(r.orden, r);
+  });
+
+  const porCliente = {};
+  porOrden.forEach(r => {
+    const nombre = toTitleCase(r.razonSocial || 'Sin cliente');
+    if (!porCliente[nombre]) porCliente[nombre] = { nombre, total: 0, cantidad: 0 };
+    porCliente[nombre].total += (r.total || 0);
+    porCliente[nombre].cantidad += 1;
+  });
+
+  const top5 = Object.values(porCliente).sort((a,b) => b.total - a.total).slice(0, 5);
+  const maxTotal = Math.max(1, ...top5.map(d => d.total));
+
+  const wrapDeudores = document.getElementById('widgetTopDeudores');
+  wrapDeudores.innerHTML = top5.length
+    ? top5.map((d, i) => `
+        <div class="deudor-row">
+          <div class="deudor-rank">${i+1}</div>
+          <div class="deudor-info">
+            <div class="nombre">${d.nombre}</div>
+            <div class="detalle">${d.cantidad} OR pendiente${d.cantidad===1?'':'s'}</div>
+            <div class="deudor-barra-bg"><div class="deudor-barra-fill" style="width:${Math.round((d.total/maxTotal)*100)}%;"></div></div>
+          </div>
+          <div class="deudor-monto">${fmtMoney(d.total)}</div>
+        </div>
+      `).join('')
+    : '<div style="color:var(--text-dim); font-size:13px; padding:8px 0;">Sin deuda pendiente. 🎉</div>';
+
+  // ---- Widget: OR del mes (torta) ----
+  const cerradasDelMes = todosLosDocs.filter(r => r.fechaCierre && r.fechaCierre.slice(0,7) === mesRef);
+  const totalCerradas = cerradasDelMes.length;
+  const facturadas = cerradasDelMes.filter(r => r.facNro && r.facNro !== '').length;
+  const conciliadas = cerradasDelMes.filter(r => (!r.facNro || r.facNro === '') && r.facSN && r.facSN !== '').length;
+  const pendientes = totalCerradas - facturadas - conciliadas;
+
+  document.getElementById('widgetTortaSub').textContent = `De las OR cerradas en ${monthLabel(mesRef)}, cómo quedaron.`;
+  const wrapTorta = document.getElementById('widgetTortaOR');
+
+  if (totalCerradas === 0) {
+    wrapTorta.innerHTML = '<div style="color:var(--text-dim); font-size:13px; padding:8px 0;">No hay OR cerradas ese mes.</div>';
+  } else {
+    const pFacturadas = (facturadas / totalCerradas) * 100;
+    const pConciliadas = (conciliadas / totalCerradas) * 100;
+    const pPendientes = (pendientes / totalCerradas) * 100;
+    const CIRC = 2 * Math.PI * 15.9;
+    const segFacturadas = (pFacturadas/100) * CIRC;
+    const segConciliadas = (pConciliadas/100) * CIRC;
+    const segPendientes = (pPendientes/100) * CIRC;
+
+    wrapTorta.innerHTML = `
+      <div class="torta-wrap">
+        <svg width="120" height="120" viewBox="0 0 42 42">
+          <circle cx="21" cy="21" r="15.9" fill="transparent" stroke="#232924" stroke-width="6"/>
+          <circle cx="21" cy="21" r="15.9" fill="transparent" stroke="#5b9dff" stroke-width="6"
+            stroke-dasharray="${segFacturadas} ${CIRC-segFacturadas}" stroke-dashoffset="0" stroke-linecap="butt" transform="rotate(-90 21 21)"/>
+          <circle cx="21" cy="21" r="15.9" fill="transparent" stroke="#4fd8c9" stroke-width="6"
+            stroke-dasharray="${segConciliadas} ${CIRC-segConciliadas}" stroke-dashoffset="${-segFacturadas}" stroke-linecap="butt" transform="rotate(-90 21 21)"/>
+          <circle cx="21" cy="21" r="15.9" fill="transparent" stroke="#ff5c5c" stroke-width="6"
+            stroke-dasharray="${segPendientes} ${CIRC-segPendientes}" stroke-dashoffset="${-(segFacturadas+segConciliadas)}" stroke-linecap="butt" transform="rotate(-90 21 21)"/>
+          <text x="21" y="19" text-anchor="middle" font-size="7" fill="var(--text)" font-weight="700">${totalCerradas}</text>
+          <text x="21" y="26" text-anchor="middle" font-size="3.2" fill="var(--text-dim)">cerradas</text>
+        </svg>
+        <div class="torta-leyenda">
+          <div><span class="dot" style="background:#5b9dff;"></span>Facturadas: ${facturadas} (${Math.round(pFacturadas)}%)</div>
+          <div><span class="dot" style="background:#4fd8c9;"></span>Conciliadas: ${conciliadas} (${Math.round(pConciliadas)}%)</div>
+          <div><span class="dot" style="background:#ff5c5c;"></span>Pendientes de cobro: ${pendientes} (${Math.round(pPendientes)}%)</div>
+        </div>
+      </div>
+    `;
+  }
 }
 
 let kpiActivo = null;
