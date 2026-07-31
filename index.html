@@ -676,6 +676,7 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
     document.querySelectorAll('.panel-content').forEach(v => v.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('view-' + btn.dataset.tab).classList.add('active');
+    cerrarDetalleKPI(); // el detalle de la sección anterior no debe quedar abierto acá
     if (monthlyData.length > 0) renderKPIs(); // por si cambiaron datos mientras se navegaba
   });
 });
@@ -1028,6 +1029,7 @@ function renderAlertaMoraInicio(){
   el.innerHTML = html;
   el.querySelectorAll('.btnVerMora').forEach(b => b.addEventListener('click', () => {
     document.querySelector('.nav-btn[data-tab="cobranza"]').click();
+    mostrarDetalleKPI('facturasImpagas', 'red');
   }));
 }
 
