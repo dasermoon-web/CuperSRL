@@ -61,14 +61,27 @@
 
   /* Tabs */
   .tabs{ display:flex; gap:8px; margin-bottom:26px; }
-  .tab-btn{
-    background:var(--panel); border:1px solid var(--line); color:var(--text-dim);
-    font-family:var(--mono); font-size:13px; letter-spacing:1px; padding:10px 20px;
-    border-radius:6px; cursor:pointer; text-transform:uppercase;
+  .app-layout{ display:flex; gap:24px; align-items:flex-start; }
+  .sidebar{
+    width:200px; flex-shrink:0; display:flex; flex-direction:column; gap:6px;
+    position:sticky; top:20px;
   }
-  .tab-btn.active{ background:var(--green-soft); border-color:var(--green); color:var(--green); }
-  .tab-view{ display:none; }
-  .tab-view.active{ display:block; }
+  .nav-btn{
+    display:flex; align-items:center; gap:10px; text-align:left;
+    background:var(--panel); border:1px solid var(--line); color:var(--text-dim);
+    font-family:var(--mono); font-size:12px; letter-spacing:1px; padding:12px 14px;
+    border-radius:8px; cursor:pointer; text-transform:uppercase;
+    transition: background .18s ease, color .18s ease, border-color .18s ease, transform .12s ease;
+  }
+  .nav-btn:hover{ background:var(--panel-2); color:var(--text); transform:translateX(2px); }
+  .nav-btn.active{ background:var(--green-soft); border-color:var(--green); color:var(--green); }
+  .main-content{ flex:1; min-width:0; }
+  .panel-content{ display:none; }
+  .panel-content.active{ display:block; animation: panelIn .28s ease; }
+  @keyframes panelIn{
+    from{ opacity:0; transform:translateY(10px) scale(.98); }
+    to{ opacity:1; transform:translateY(0) scale(1); }
+  }
 
   #loadingMsg{ text-align:center; padding:60px 0; color:var(--text-dim); font-family:var(--mono); }
 
@@ -270,16 +283,27 @@
     </div>
   </header>
 
-  <div class="tabs">
-    <button class="tab-btn active" data-tab="dashboard">📊 Dashboard</button>
-    <button class="tab-btn" data-tab="carga">📝 Cargar/Modificar OR</button>
-    <button class="tab-btn" data-tab="usuarios">👤 Usuarios</button>
-    <button class="tab-btn" data-tab="dominio">🔧 Historial por Dominio</button>
-    <button class="tab-btn" data-tab="cobranza">💰 Cobranza</button>
+  <div class="app-layout">
+    <div class="sidebar">
+      <button class="nav-btn" data-tab="dashboard">📊 Facturación</button>
+      <button class="nav-btn" data-tab="carga">📝 Órdenes</button>
+      <button class="nav-btn" data-tab="cobranza">💰 Cobranza</button>
+      <button class="nav-btn" data-tab="dominio">🔧 Historial</button>
+      <button class="nav-btn" data-tab="usuarios">👤 Usuarios</button>
+    </div>
+    <div class="main-content">
+
+  <!-- ================= INICIO (pantalla de bienvenida) ================= -->
+  <div class="panel-content active" id="view-inicio">
+    <div id="alertaMoraInicio"></div>
+    <div style="border:2px dashed var(--line); border-radius:10px; padding:50px 20px; text-align:center; color:var(--text-dim); font-size:13px; background:var(--panel);">
+      📊 Gráficos — a definir más adelante
+    </div>
   </div>
 
+
   <!-- ================= DASHBOARD ================= -->
-  <div class="tab-view active" id="view-dashboard">
+  <div class="panel-content" id="view-dashboard">
     <div id="loadingMsg">Cargando datos desde Firestore...</div>
 
     <div id="content" style="display:none;">
@@ -288,83 +312,21 @@
         <div id="dashboardMesLabel" style="font-family:var(--mono); font-size:14px; font-weight:700; min-width:110px; text-align:center;"></div>
         <button type="button" id="dashboardMesNext" class="btn secondary" style="padding:6px 14px; font-size:16px; line-height:1;">›</button>
       </div>
-      <div id="alertaMora"></div>
       <div class="kpis" id="kpi-row"></div>
-
-      <div class="dos-col-dashboard" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:16px; margin-top:16px;">
-        <div class="panel" style="margin:0;">
-          <div class="panel-head"><h2 style="font-size:14px;">⭐ Top 5 — Deudores</h2></div>
-          <div class="panel-sub" style="margin:-6px 0 12px;">Pendiente de facturación + facturas impagas, de mayor a menor importe.</div>
-          <div id="widgetTopDeudores"></div>
-        </div>
-        <div class="panel" style="margin:0;">
-          <div class="panel-head"><h2 style="font-size:14px;">📊 OR del mes</h2></div>
-          <div class="panel-sub" style="margin:-6px 0 12px;" id="widgetTortaSub"></div>
-          <div id="widgetTortaOR"></div>
-        </div>
-      </div>
-
-      <div class="panel" id="detalleKpiPanel" style="display:none;">
-        <div class="panel-head">
-          <h2 id="detalleKpiTitulo">Detalle</h2>
-          <div style="display:flex; gap:8px;">
-            <button type="button" class="btn secondary" id="btnExportarExcel" style="display:none;">📥 Reporte</button>
-            <button type="button" class="btn secondary" id="detalleKpiCerrar">Cerrar ✕</button>
-          </div>
-        </div>
-
-        <div id="detalleKpiCaption" style="display:none; background:var(--panel-2); border:1px solid var(--line); border-radius:6px; padding:10px 14px; margin-bottom:14px; font-size:12px; color:var(--text-dim); line-height:1.6;"></div>
-
-        <div id="detalleKpiTablaWrap" style="max-height:420px; overflow-y:auto;">
-          <table>
-            <thead id="detalleKpiThead"><tr><th>Orden</th><th style="text-align:left;">Cliente</th><th style="text-align:left;">Vehículo</th><th>Fecha</th><th>Importe</th></tr></thead>
-            <tbody id="detalleKpiBody"></tbody>
-          </table>
-        </div>
-
-        <div id="detalleKpiChartWrap" style="display:none;">
-          <div style="margin-bottom:14px;">
-            <label style="display:block; font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--text-dim); margin-bottom:6px;">Año</label>
-            <select id="detalleAnioSelector" style="background:var(--panel-2); border:1px solid var(--line); color:var(--text); padding:8px 12px; border-radius:5px; font-family:var(--mono); font-size:13px;"></select>
-          </div>
-          <div class="legend-mini" style="margin-bottom:10px;">
-            <span><span class="dot" style="background:var(--green)"></span>Importe OR Cerradas</span>
-            <span><span class="dot" style="background:rgb(0,0,225)"></span>Importe Cobrado</span>
-          </div>
-          <div style="background:var(--panel-2); border:1px solid var(--line); border-radius:6px; padding:10px 14px; margin-bottom:16px; font-size:12px; color:var(--text-dim); line-height:1.6;">
-            <div><strong style="color:var(--green);">OR Cerradas:</strong> todas las órdenes que se cerraron en el mes.</div>
-            <div><strong style="color:rgb(90,120,255);">OR Cobradas:</strong> de esas órdenes, las que ya fueron cobradas por algún medio (factura o conciliado).</div>
-          </div>
-          <div id="detalleChartScroll" style="overflow-x:auto;"></div>
-          <div style="max-height:340px; overflow-y:auto; margin-top:18px;">
-            <table>
-              <thead><tr><th>Mes</th><th>Importe Cerrado</th><th>Importe Cobrado</th><th>Diferencia</th></tr></thead>
-              <tbody id="detalleAnioTablaBody"></tbody>
-            </table>
-          </div>
-
-          <div id="detalleMesOrdenesWrap" style="display:none; margin-top:22px; padding-top:18px; border-top:1px solid var(--line);">
-            <div class="panel-head" style="margin-bottom:12px;">
-              <h3 id="detalleMesOrdenesTitulo" style="font-size:13px; margin:0; text-transform:uppercase; letter-spacing:1px; color:var(--text);"></h3>
-              <div style="display:flex; gap:8px;">
-                <button type="button" class="btn secondary" id="btnExportarMesOrdenes">📥 Reporte</button>
-                <button type="button" class="btn secondary" id="detalleMesOrdenesCerrar">Cerrar ✕</button>
-              </div>
-            </div>
-            <div style="max-height:380px; overflow-y:auto;">
-              <table>
-                <thead><tr><th>Orden</th><th style="text-align:left;">Cliente</th><th style="text-align:left;">Vehículo</th><th>Factura</th><th>Importe</th><th>Cobrada</th></tr></thead>
-                <tbody id="detalleMesOrdenesBody"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 
   <!-- ================= CARGA ================= -->
-  <div class="tab-view" id="view-carga">
+  <div class="panel-content" id="view-carga">
+    <div id="content-ordenes" style="display:none;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+        <button type="button" id="ordenesMesPrev" class="btn secondary" style="padding:6px 14px; font-size:16px; line-height:1;">‹</button>
+        <div id="ordenesMesLabel" style="font-family:var(--mono); font-size:14px; font-weight:700; min-width:110px; text-align:center;"></div>
+        <button type="button" id="ordenesMesNext" class="btn secondary" style="padding:6px 14px; font-size:16px; line-height:1;">›</button>
+      </div>
+      <div class="kpis" id="kpi-row-ordenes" style="margin-bottom:24px;"></div>
+    </div>
+
     <div class="panel">
       <div class="panel-head"><h2>Cargar orden desde PDF</h2></div>
       <div class="panel-sub">
@@ -438,7 +400,7 @@
   </div>
 
   <!-- ================= USUARIOS ================= -->
-  <div class="tab-view" id="view-usuarios">
+  <div class="panel-content" id="view-usuarios">
     <div class="panel">
       <div class="panel-head"><h2>Crear usuario nuevo</h2></div>
       <div class="panel-sub">
@@ -463,7 +425,7 @@
   </div>
 
   <!-- ================= HISTORIAL POR DOMINIO ================= -->
-  <div class="tab-view" id="view-dominio">
+  <div class="panel-content" id="view-dominio">
     <div class="panel">
       <div class="panel-head"><h2>Buscar historial de reparaciones</h2></div>
       <div class="panel-sub">Escribí la patente y buscá — te muestra todas las reparaciones registradas para ese vehículo.</div>
@@ -478,7 +440,28 @@
   </div>
 
   <!-- ================= COBRANZA ================= -->
-  <div class="tab-view" id="view-cobranza">
+  <div class="panel-content" id="view-cobranza">
+    <div id="alertaMoraCobranza"></div>
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+      <button type="button" id="cobranzaMesPrev" class="btn secondary" style="padding:6px 14px; font-size:16px; line-height:1;">‹</button>
+      <div id="cobranzaMesLabel" style="font-family:var(--mono); font-size:14px; font-weight:700; min-width:110px; text-align:center;"></div>
+      <button type="button" id="cobranzaMesNext" class="btn secondary" style="padding:6px 14px; font-size:16px; line-height:1;">›</button>
+    </div>
+    <div class="kpis" id="kpi-row-cobranza" style="margin-bottom:16px;"></div>
+
+    <div class="dos-col-dashboard" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:16px; margin-bottom:24px;">
+      <div class="panel" style="margin:0;">
+        <div class="panel-head"><h2 style="font-size:14px;">⭐ Top 5 — Deudores</h2></div>
+        <div class="panel-sub" style="margin:-6px 0 12px;">Pendiente de facturación + facturas impagas, de mayor a menor importe.</div>
+        <div id="widgetTopDeudores"></div>
+      </div>
+      <div class="panel" style="margin:0;">
+        <div class="panel-head"><h2 style="font-size:14px;">📊 OR del mes</h2></div>
+        <div class="panel-sub" style="margin:-6px 0 12px;" id="widgetTortaSub"></div>
+        <div id="widgetTortaOR"></div>
+      </div>
+    </div>
+
     <div class="panel">
       <div class="panel-head"><h2>Buscar orden para cobranza / facturación</h2></div>
       <div class="panel-sub">Buscá por número de Orden o por número de Factura — lo que tengas más a mano.</div>
@@ -592,6 +575,66 @@
     </div>
   </div>
 
+    <div class="panel" id="detalleKpiPanel" style="display:none;">
+      <div class="panel-head">
+        <h2 id="detalleKpiTitulo">Detalle</h2>
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="btn secondary" id="btnExportarExcel" style="display:none;">📥 Reporte</button>
+          <button type="button" class="btn secondary" id="detalleKpiCerrar">Cerrar ✕</button>
+        </div>
+      </div>
+
+      <div id="detalleKpiCaption" style="display:none; background:var(--panel-2); border:1px solid var(--line); border-radius:6px; padding:10px 14px; margin-bottom:14px; font-size:12px; color:var(--text-dim); line-height:1.6;"></div>
+
+      <div id="detalleKpiTablaWrap" style="max-height:420px; overflow-y:auto;">
+        <table>
+          <thead id="detalleKpiThead"><tr><th>Orden</th><th style="text-align:left;">Cliente</th><th style="text-align:left;">Vehículo</th><th>Fecha</th><th>Importe</th></tr></thead>
+          <tbody id="detalleKpiBody"></tbody>
+        </table>
+      </div>
+
+      <div id="detalleKpiChartWrap" style="display:none;">
+        <div style="margin-bottom:14px;">
+          <label style="display:block; font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--text-dim); margin-bottom:6px;">Año</label>
+          <select id="detalleAnioSelector" style="background:var(--panel-2); border:1px solid var(--line); color:var(--text); padding:8px 12px; border-radius:5px; font-family:var(--mono); font-size:13px;"></select>
+        </div>
+        <div class="legend-mini" style="margin-bottom:10px;">
+          <span><span class="dot" style="background:var(--green)"></span>Importe OR Cerradas</span>
+          <span><span class="dot" style="background:rgb(0,0,225)"></span>Importe Cobrado</span>
+        </div>
+        <div style="background:var(--panel-2); border:1px solid var(--line); border-radius:6px; padding:10px 14px; margin-bottom:16px; font-size:12px; color:var(--text-dim); line-height:1.6;">
+          <div><strong style="color:var(--green);">OR Cerradas:</strong> todas las órdenes que se cerraron en el mes.</div>
+          <div><strong style="color:rgb(90,120,255);">OR Cobradas:</strong> de esas órdenes, las que ya fueron cobradas por algún medio (factura o conciliado).</div>
+        </div>
+        <div id="detalleChartScroll" style="overflow-x:auto;"></div>
+        <div style="max-height:340px; overflow-y:auto; margin-top:18px;">
+          <table>
+            <thead><tr><th>Mes</th><th>Importe Cerrado</th><th>Importe Cobrado</th><th>Diferencia</th></tr></thead>
+            <tbody id="detalleAnioTablaBody"></tbody>
+          </table>
+        </div>
+
+        <div id="detalleMesOrdenesWrap" style="display:none; margin-top:22px; padding-top:18px; border-top:1px solid var(--line);">
+          <div class="panel-head" style="margin-bottom:12px;">
+            <h3 id="detalleMesOrdenesTitulo" style="font-size:13px; margin:0; text-transform:uppercase; letter-spacing:1px; color:var(--text);"></h3>
+            <div style="display:flex; gap:8px;">
+              <button type="button" class="btn secondary" id="btnExportarMesOrdenes">📥 Reporte</button>
+              <button type="button" class="btn secondary" id="detalleMesOrdenesCerrar">Cerrar ✕</button>
+            </div>
+          </div>
+          <div style="max-height:380px; overflow-y:auto;">
+            <table>
+              <thead><tr><th>Orden</th><th style="text-align:left;">Cliente</th><th style="text-align:left;">Vehículo</th><th>Factura</th><th>Importe</th><th>Cobrada</th></tr></thead>
+              <tbody id="detalleMesOrdenesBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    </div>
+  </div>
+
 </div>
 
 
@@ -621,19 +664,19 @@ function limpiarPanelDominio(){
   if (cont) cont.innerHTML = '';
 }
 
-document.querySelectorAll('.tab-btn').forEach(btn => {
+document.querySelectorAll('.nav-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    const anterior = document.querySelector('.tab-btn.active');
+    const anterior = document.querySelector('.nav-btn.active');
     const tabAnterior = anterior ? anterior.dataset.tab : null;
     if (tabAnterior === 'carga') limpiarPanelCarga();
     if (tabAnterior === 'dominio') limpiarPanelDominio();
     if (tabAnterior === 'cobranza' && window.limpiarPanelCobranza) limpiarPanelCobranza();
 
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-view').forEach(v => v.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.panel-content').forEach(v => v.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('view-' + btn.dataset.tab).classList.add('active');
-    if (btn.dataset.tab === 'dashboard' && monthlyData.length === 0) cargarDatos();
+    if (monthlyData.length > 0) renderKPIs(); // por si cambiaron datos mientras se navegaba
   });
 });
 
@@ -734,7 +777,9 @@ const fmtISOaDDMMAA = (isoStr) => {
 let monthlyData = [];
 let monthlyCierres = [];
 let cobradasPorMes = {};
-let dashboardMes = null;
+var dashboardMes = null;
+var mesOrdenes = null;
+var mesCobranza = null;
 let openOrders = [];
 let pendientesFacturar = [];
 let pendientesCobroMarcados = [];
@@ -809,51 +854,63 @@ function procesarDatos(docs){
 function render(){
   document.getElementById('loadingMsg').style.display = 'none';
   document.getElementById('content').style.display = 'block';
+  document.getElementById('content-ordenes').style.display = 'block';
   document.getElementById('last-month-tag').textContent = fmtFechaDDMMAA(ultimaCargaFecha);
 
   if (todosLosDocs.length === 0){
-    document.getElementById('content').innerHTML = '<div class="panel">Todavía no hay datos cargados. Usá la pestaña "Cargar OR".</div>';
+    document.getElementById('content').innerHTML = '<div class="panel">Todavía no hay datos cargados. Usá la sección "Órdenes" para cargar la primera.</div>';
     return;
   }
 
-  prepararSelectorMesDashboard();
+  prepararSelectorMes('facturacion', 'dashboardMes', 'dashboardMesPrev', 'dashboardMesLabel', 'dashboardMesNext', renderKPIs);
+  prepararSelectorMes('ordenes', 'mesOrdenes', 'ordenesMesPrev', 'ordenesMesLabel', 'ordenesMesNext', renderKPIsOrdenes);
+  prepararSelectorMes('cobranza', 'mesCobranza', 'cobranzaMesPrev', 'cobranzaMesLabel', 'cobranzaMesNext', renderKPIsCobranza);
   renderKPIs();
+  renderKPIsOrdenes();
+  renderKPIsCobranza();
+  renderAlertaMoraInicio();
   cerrarDetalleKPI();
 }
 
-function prepararSelectorMesDashboard(){
+// Selector de mes genérico y reutilizable: cada sección tiene su propio mes independiente,
+// guardado en la variable global cuyo nombre se pasa en `varName` (ver más abajo).
+const _mesesSeccion = { facturacion: null, ordenes: null, cobranza: null };
+function prepararSelectorMes(seccion, varName, idPrev, idLabel, idNext, onCambio){
   const hoy = new Date();
   const mesHoy = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`;
   const meses = new Set([mesHoy]);
   monthlyData.forEach(m => meses.add(m.Mes));
   monthlyCierres.forEach(m => meses.add(m.Mes));
-  const listaMeses = [...meses].sort(); // ascendente: el más viejo primero
+  const listaMeses = [...meses].sort();
 
-  if (!dashboardMes || !listaMeses.includes(dashboardMes)) dashboardMes = mesHoy;
+  if (!_mesesSeccion[seccion] || !listaMeses.includes(_mesesSeccion[seccion])) _mesesSeccion[seccion] = mesHoy;
+  window[varName] = _mesesSeccion[seccion];
 
   const pintar = () => {
-    document.getElementById('dashboardMesLabel').textContent = monthLabelFull(dashboardMes);
-    const idx = listaMeses.indexOf(dashboardMes);
-    document.getElementById('dashboardMesPrev').disabled = (idx <= 0);
-    document.getElementById('dashboardMesNext').disabled = (idx === -1 || idx >= listaMeses.length - 1);
+    document.getElementById(idLabel).textContent = monthLabelFull(_mesesSeccion[seccion]);
+    const idx = listaMeses.indexOf(_mesesSeccion[seccion]);
+    document.getElementById(idPrev).disabled = (idx <= 0);
+    document.getElementById(idNext).disabled = (idx === -1 || idx >= listaMeses.length - 1);
   };
   pintar();
 
-  document.getElementById('dashboardMesPrev').onclick = () => {
-    const idx = listaMeses.indexOf(dashboardMes);
+  document.getElementById(idPrev).onclick = () => {
+    const idx = listaMeses.indexOf(_mesesSeccion[seccion]);
     if (idx > 0) {
-      dashboardMes = listaMeses[idx - 1];
+      _mesesSeccion[seccion] = listaMeses[idx - 1];
+      window[varName] = _mesesSeccion[seccion];
       pintar();
-      renderKPIs();
+      onCambio();
       cerrarDetalleKPI();
     }
   };
-  document.getElementById('dashboardMesNext').onclick = () => {
-    const idx = listaMeses.indexOf(dashboardMes);
+  document.getElementById(idNext).onclick = () => {
+    const idx = listaMeses.indexOf(_mesesSeccion[seccion]);
     if (idx !== -1 && idx < listaMeses.length - 1) {
-      dashboardMes = listaMeses[idx + 1];
+      _mesesSeccion[seccion] = listaMeses[idx + 1];
+      window[varName] = _mesesSeccion[seccion];
       pintar();
-      renderKPIs();
+      onCambio();
       cerrarDetalleKPI();
     }
   };
@@ -874,11 +931,10 @@ function kpiIcon(kind){
   return iconos[kind] || '';
 }
 
+// ---- Facturación ----
 function renderKPIs(){
   const mesRef = dashboardMes || `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}`;
   const datosMes = monthlyData.find(m => m.Mes === mesRef) || { Mes: mesRef, Facturado: 0, Conciliado: 0 };
-  const totalPendFacturar = pendientesFacturar.reduce((a,r)=>a + (r.total||0), 0);
-  const totalPendFacturacion = pendientesCobroMarcados.reduce((a,r)=>a + getSaldoPendiente(r), 0);
   const totalFacturasImpagas = facturasImpagas.reduce((a,r)=>a + montoAdeudado(r), 0);
 
   cobradasEsteMes = todosLosDocs.filter(rec => rec.fechaCobro && rec.fechaCobro !== 'SI' && rec.fechaCobro.slice(0,7) === mesRef && rec.total && rec.facNro && rec.facNro !== '');
@@ -888,48 +944,114 @@ function renderKPIs(){
   const mesesTrend = ultimosNMeses(mesRef, 6);
   const mesPrev = mesAnterior(mesRef);
   const facturadoPrev = (monthlyData.find(m => m.Mes === mesPrev) || {}).Facturado || 0;
-  const conciliadoPrev = (monthlyData.find(m => m.Mes === mesPrev) || {}).Conciliado || 0;
   const cobradasPrev = cobradasPorMes[mesPrev] || 0;
   const facturadoTrend = mesesTrend.map(m => (monthlyData.find(x => x.Mes === m) || {}).Facturado || 0);
-  const conciliadoTrend = mesesTrend.map(m => (monthlyData.find(x => x.Mes === m) || {}).Conciliado || 0);
   const cobradasTrend = mesesTrend.map(m => cobradasPorMes[m] || 0);
 
-  // --- Alerta de mora: facturas impagas hace más de 40 días (según fecha de factura) ---
+  const kpiRow = document.getElementById('kpi-row');
+  const kpis = [
+    { tipo: 'facturado', label: `Facturado — ${monthLabel(datosMes.Mes)}`, value: fmtMoney(datosMes.Facturado), color:'blue', icon:'money', sub:'Total facturado del mes', prev: facturadoPrev, trend: facturadoTrend },
+    { tipo: 'cobradasMes', label: `Fac. Cobradas — ${monthLabel(mesRef)}`, value: fmtMoney(totalCobradasEsteMes), color:'green', icon:'money', sub:'Con factura, cobradas en el mes', prev: cobradasPrev, trend: cobradasTrend },
+    { tipo: 'facturasImpagas', label: 'Facturas pendientes de cobro', value: fmtMoney(totalFacturasImpagas), color: totalFacturasImpagas>0 ? 'red':'green', icon:'warn', sub: totalFacturasImpagas>0 ? 'Cobrar cuanto antes' : 'Sin deuda' },
+  ];
+  kpiRow.innerHTML = kpis.map(k => `
+    <div class="kpi c-${k.color}" data-tipo="${k.tipo}" data-color="${k.color}">
+      <div class="icon">${kpiIcon(k.icon)}</div>
+      <div class="label">${k.label}</div>
+      <div class="valuerow">
+        <div class="value">${k.value}</div>
+        ${k.trend ? deltaHtml(k.trend[k.trend.length-1], k.prev) : ''}
+      </div>
+      ${k.sub ? `<div class="sub">${k.sub}</div>` : ''}
+      ${k.trend ? sparklineSvg(k.trend, KPI_COLOR_HEX[k.color]) : ''}
+    </div>
+  `).join('');
+
+  kpiRow.querySelectorAll('.kpi').forEach(el => {
+    el.addEventListener('click', () => mostrarDetalleKPI(el.dataset.tipo, el.dataset.color));
+  });
+}
+
+// ---- Órdenes ----
+function renderKPIsOrdenes(){
+  const mesRef = mesOrdenes || `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}`;
+  const datosCierre = monthlyCierres.find(m => m.Mes === mesRef) || { CantidadCerradas: 0 };
+
+  const kpiRow = document.getElementById('kpi-row-ordenes');
+  const kpis = [
+    { tipo: 'detalleMensual', label: `OR cerradas — ${monthLabel(mesRef)}`, value: String(datosCierre.CantidadCerradas), color:'orange', icon:'chart', sub:'Tocá para ver el detalle completo' },
+    { tipo: 'abiertas', label: 'Órdenes abiertas ahora', value: String(openOrders.length), color:'yellow', icon:'door', sub:'En proceso de reparación' },
+  ];
+  kpiRow.innerHTML = kpis.map(k => `
+    <div class="kpi c-${k.color}" data-tipo="${k.tipo}" data-color="${k.color}">
+      <div class="icon">${kpiIcon(k.icon)}</div>
+      <div class="label">${k.label}</div>
+      <div class="value">${k.value}</div>
+      ${k.sub ? `<div class="sub">${k.sub}</div>` : ''}
+    </div>
+  `).join('');
+
+  kpiRow.querySelectorAll('.kpi').forEach(el => {
+    el.addEventListener('click', () => mostrarDetalleKPI(el.dataset.tipo, el.dataset.color));
+  });
+}
+
+// ---- Cobranza: tarjetas + alerta de mora + Top Deudores + torta ----
+function renderAlertaMoraHtml(){
   const HOY_MS = Date.now();
   const MORA_DIAS = 40;
   const facturasEnMora = facturasImpagas
     .filter(r => r.fechaFact && r.fechaFact !== '' && (HOY_MS - new Date(r.fechaFact).getTime()) / 86400000 >= MORA_DIAS)
     .sort((a,b) => new Date(a.fechaFact) - new Date(b.fechaFact)); // más antigua primero
-  const alertaEl = document.getElementById('alertaMora');
-  if (facturasEnMora.length > 0) {
-    const totalMora = facturasEnMora.reduce((a,r) => a + montoAdeudado(r), 0);
-    const clientes = [...new Set(facturasEnMora.map(r => toTitleCase(r.razonSocial || 'sin cliente')))];
-    const clientesTxt = clientes.length <= 2
-      ? clientes.join(' y ')
-      : `${clientes.slice(0,2).join(', ')} y ${clientes.length - 2} más`;
-    alertaEl.innerHTML = `
-      <div class="alerta-mora">
-        <div class="icono">⚠️</div>
-        <div class="txt">
-          <strong>${facturasEnMora.length} factura${facturasEnMora.length===1?'':'s'} con más de ${MORA_DIAS} días sin cobrar</strong>
-          <div>Total en riesgo: ${fmtMoney(totalMora)} — ${clientesTxt}</div>
-        </div>
-        <button type="button" id="btnVerMora">Ver detalle</button>
-      </div>`;
-    document.getElementById('btnVerMora').addEventListener('click', () => mostrarDetalleKPI('facturasImpagas', 'red'));
-  } else {
-    alertaEl.innerHTML = '';
-  }
 
-  const kpiRow = document.getElementById('kpi-row');
+  if (facturasEnMora.length === 0) return '';
+
+  const totalMora = facturasEnMora.reduce((a,r) => a + montoAdeudado(r), 0);
+  const clientes = [...new Set(facturasEnMora.map(r => toTitleCase(r.razonSocial || 'sin cliente')))];
+  const clientesTxt = clientes.length <= 2
+    ? clientes.join(' y ')
+    : `${clientes.slice(0,2).join(', ')} y ${clientes.length - 2} más`;
+  return `
+    <div class="alerta-mora">
+      <div class="icono">⚠️</div>
+      <div class="txt">
+        <strong>${facturasEnMora.length} factura${facturasEnMora.length===1?'':'s'} con más de ${MORA_DIAS} días sin cobrar</strong>
+        <div>Total en riesgo: ${fmtMoney(totalMora)} — ${clientesTxt}</div>
+      </div>
+      <button type="button" class="btnVerMora">Ver detalle</button>
+    </div>`;
+}
+
+function renderAlertaMoraInicio(){
+  const html = renderAlertaMoraHtml();
+  const el = document.getElementById('alertaMoraInicio');
+  el.innerHTML = html;
+  el.querySelectorAll('.btnVerMora').forEach(b => b.addEventListener('click', () => {
+    document.querySelector('.nav-btn[data-tab="cobranza"]').click();
+  }));
+}
+
+function renderKPIsCobranza(){
+  const mesRef = mesCobranza || `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}`;
+  const datosMes = monthlyData.find(m => m.Mes === mesRef) || { Mes: mesRef, Conciliado: 0 };
+  const totalPendFacturacion = pendientesCobroMarcados.reduce((a,r)=>a + getSaldoPendiente(r), 0);
+  const totalFacturasImpagas = facturasImpagas.reduce((a,r)=>a + montoAdeudado(r), 0);
+
+  const mesesTrend = ultimosNMeses(mesRef, 6);
+  const mesPrev = mesAnterior(mesRef);
+  const conciliadoPrev = (monthlyData.find(m => m.Mes === mesPrev) || {}).Conciliado || 0;
+  const conciliadoTrend = mesesTrend.map(m => (monthlyData.find(x => x.Mes === m) || {}).Conciliado || 0);
+
+  // Alerta de mora (también acá, además de en la pantalla de inicio)
+  const alertaEl = document.getElementById('alertaMoraCobranza');
+  alertaEl.innerHTML = renderAlertaMoraHtml();
+  alertaEl.querySelectorAll('.btnVerMora').forEach(b => b.addEventListener('click', () => mostrarDetalleKPI('facturasImpagas', 'red')));
+
+  const kpiRow = document.getElementById('kpi-row-cobranza');
   const kpis = [
-    { tipo: 'detalleMensual', label: 'Detalle general', value: '', color:'orange', icon:'chart', sub:'OR cerradas vs. OR cobradas' },
-    { tipo: 'facturado', label: `Facturado — ${monthLabel(datosMes.Mes)}`, value: fmtMoney(datosMes.Facturado), color:'blue', icon:'money', sub:'Total facturado del mes', prev: facturadoPrev, trend: facturadoTrend },
-    { tipo: 'conciliado', label: `Conciliado — ${monthLabel(datosMes.Mes)}`, value: fmtMoney(datosMes.Conciliado), color:'teal', icon:'check', sub:'Conciliado sin factura', prev: conciliadoPrev, trend: conciliadoTrend },
-    { tipo: 'cobradasMes', label: `Fac. Cobradas — ${monthLabel(mesRef)}`, value: fmtMoney(totalCobradasEsteMes), color:'green', icon:'money', sub:'Con factura, cobradas en el mes', prev: cobradasPrev, trend: cobradasTrend },
-    { tipo: 'pendFacturacion', label: 'Pendiente de facturación', value: fmtMoney(totalPendFacturacion), color: totalPendFacturacion>0 ? 'red':'green', icon:'clock', sub: totalPendFacturacion>0 ? 'Requieren facturar' : 'Todo al día' },
-    { tipo: 'facturasImpagas', label: 'Facturas pendientes de pago', value: fmtMoney(totalFacturasImpagas), color: totalFacturasImpagas>0 ? 'red':'green', icon:'warn', sub: totalFacturasImpagas>0 ? 'Cobrar cuanto antes' : 'Sin deuda' },
-    { tipo: 'abiertas', label: 'Órdenes abiertas ahora', value: openOrders.length, color:'yellow', icon:'door', sub:'En proceso de reparación' },
+    { tipo: 'conciliado', label: `Conciliado — ${monthLabel(datosMes.Mes)}`, value: fmtMoney(datosMes.Conciliado), color:'teal', icon:'check', sub:'Cobrado o conciliado sin factura', prev: conciliadoPrev, trend: conciliadoTrend },
+    { tipo: 'pendFacturacion', label: 'OR pendientes de facturación', value: fmtMoney(totalPendFacturacion), color: totalPendFacturacion>0 ? 'red':'green', icon:'clock', sub: totalPendFacturacion>0 ? 'Requieren facturar' : 'Todo al día' },
+    { tipo: 'facturasImpagas', label: 'Facturas pendientes de cobro', value: fmtMoney(totalFacturasImpagas), color: totalFacturasImpagas>0 ? 'red':'green', icon:'warn', sub: totalFacturasImpagas>0 ? 'Cobrar cuanto antes' : 'Sin deuda' },
   ];
   kpiRow.innerHTML = kpis.map(k => `
     <div class="kpi c-${k.color}" data-tipo="${k.tipo}" data-color="${k.color}">
@@ -1046,7 +1168,7 @@ function cerrarDetalleKPI(){
   panel.style.boxShadow = '';
   document.getElementById('detalleKpiTitulo').style.color = '';
   document.getElementById('btnExportarExcel').style.display = 'none';
-  document.querySelectorAll('#kpi-row .kpi').forEach(el => el.style.boxShadow = '');
+  document.querySelectorAll('#kpi-row .kpi, #kpi-row-ordenes .kpi, #kpi-row-cobranza .kpi').forEach(el => el.style.boxShadow = '');
   document.getElementById('detalleMesOrdenesWrap').style.display = 'none';
   mesOrdenesActivo = null;
   document.getElementById('detalleKpiCaption').style.display = 'none';
@@ -1057,7 +1179,7 @@ function mostrarDetalleKPI(tipo, color){
   if (kpiActivo === tipo) { cerrarDetalleKPI(); return; }
   kpiActivo = tipo;
   const colorHex = KPI_COLOR_HEX[color] || KPI_COLOR_HEX.green;
-  document.querySelectorAll('#kpi-row .kpi').forEach(el => {
+  document.querySelectorAll('#kpi-row .kpi, #kpi-row-ordenes .kpi, #kpi-row-cobranza .kpi').forEach(el => {
     el.style.boxShadow = (el.dataset.tipo === tipo) ? `0 0 0 2px ${KPI_COLOR_HEX[el.dataset.color] || colorHex}` : '';
   });
 
@@ -1083,7 +1205,8 @@ function mostrarDetalleKPI(tipo, color){
   tablaWrap.style.display = 'block';
   chartWrap.style.display = 'none';
 
-  const mesRef = dashboardMes || `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}`;
+  const mesActualPorDefecto = `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}`;
+  const mesRef = (tipo === 'conciliado' ? mesCobranza : dashboardMes) || mesActualPorDefecto;
   let lista = [];
   let titulo = '';
   let fechaCol = (o) => (o.fechaCierre && o.fechaCierre !== 'N') ? o.fechaCierre : (o.fechaIng || '');
@@ -1101,7 +1224,7 @@ function mostrarDetalleKPI(tipo, color){
     titulo = 'Pendiente de facturación';
   } else if (tipo === 'facturasImpagas') {
     lista = facturasImpagas.map(o => ({ ...o, total: montoAdeudado(o), totalFacturado: o.total }));
-    titulo = 'Facturas pendientes de pago';
+    titulo = 'Facturas pendientes de cobro';
     fechaCol = (o) => o.fechaFact;
   } else if (tipo === 'cobradasMes') {
     lista = cobradasEsteMes;
@@ -1291,7 +1414,7 @@ document.getElementById('btnExportarExcel').addEventListener('click', async () =
     sheet.getCell('C2').font = { size: 10, italic: true, color: { argb: 'FF6B6B6B' } };
 
     const filaHeader = 5;
-    const columnaImporte = (titulo === 'Facturas pendientes de pago' || titulo === 'Pendiente de facturación') ? 'Saldo pendiente' : 'Importe';
+    const columnaImporte = (titulo === 'Facturas pendientes de cobro' || titulo === 'Pendiente de facturación') ? 'Saldo pendiente' : 'Importe';
     const encabezados = ['Orden', 'Cliente', 'Vehículo', 'Dominio', 'Factura', 'Fecha Factura', columnaImporte];
     sheet.getRow(filaHeader).values = encabezados;
     sheet.getRow(filaHeader).eachCell(cell => {
@@ -1648,6 +1771,8 @@ function calcularUltimaCarga(docs){
 async function cargarDatos(forzar){
   document.getElementById('loadingMsg').style.display = 'block';
   document.getElementById('content').style.display = 'none';
+  const contOrdenesEl = document.getElementById('content-ordenes');
+  if (contOrdenesEl) contOrdenesEl.style.display = 'none';
   try {
     // 1) Leer el "sello" — 1 sola lectura, súper barata
     const selloDoc = await db.collection('meta').doc('estado').get();
