@@ -572,9 +572,15 @@
           <label for="cobPendienteCobro">Marcar como "pendiente de facturación" (columna O del Excel)</label>
         </div>
 
-        <div class="checkbox-row">
-          <input type="checkbox" id="cobFacturaImpaga">
-          <label for="cobFacturaImpaga">Factura pendiente de pago (columna AG = "NO")</label>
+        <label style="margin-top:14px;">Monto cobrado hasta ahora</label>
+        <div style="position:relative;">
+          <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-dim); font-size:14px; pointer-events:none;">$</span>
+          <input type="text" inputmode="numeric" id="cobMontoCobrado" placeholder="Ej: 2.000.000" style="padding-left:26px;">
+        </div>
+        <div class="hint">Si te pagaron una parte, cargá acá cuánto entró en total (no solo lo nuevo). Si te terminan de pagar el resto, volvés a esta OR y actualizás el número.</div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; padding:10px 14px; background:var(--panel-2); border:1px solid var(--line); border-radius:6px;">
+          <span style="font-size:12px; color:var(--text-dim);">Saldo pendiente</span>
+          <strong id="cobSaldoPendiente" style="font-family:var(--mono); font-size:15px;">$0</strong>
         </div>
 
         <div class="actions">
@@ -638,6 +644,21 @@ const parseMiles = (str) => {
   const limpio = str.toString().replace(/\./g, '').replace(/,/g, '').replace(/[^\d-]/g, '');
   return parseInt(limpio, 10) || 0;
 };
+// Monto cobrado de una OR ya facturada. Si no tiene el campo (dato viejo), se infiere
+// del checkbox histórico "facturaImpaga": impaga = nada cobrado, no impaga = cobrada por completo.
+function getMontoCobrado(o){
+  if (typeof o.montoCobrado === 'number') return Math.max(0, Math.min(o.montoCobrado, o.total || 0));
+  return o.facturaImpaga ? 0 : (o.total || 0);
+}
+function getSaldoPendiente(o){
+  return Math.max(0, (o.total || 0) - getMontoCobrado(o));
+}
+// Cuánto se le debe realmente al taller por esta OR: si todavía no tiene factura,
+// se debe el total completo; si ya está facturada, el saldo pendiente de cobro.
+function montoAdeudado(o){
+  const facturada = o.facNro && o.facNro !== '';
+  return facturada ? getSaldoPendiente(o) : (o.total || 0);
+}
 const fmtMoneyShort = (n) => {
   if (Math.abs(n) >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M';
   if (Math.abs(n) >= 1e3) return '$' + (n/1e3).toFixed(0) + 'k';
@@ -857,7 +878,7 @@ function renderKPIs(){
   const datosMes = monthlyData.find(m => m.Mes === mesRef) || { Mes: mesRef, Facturado: 0, Conciliado: 0 };
   const totalPendFacturar = pendientesFacturar.reduce((a,r)=>a + (r.total||0), 0);
   const totalPendFacturacion = pendientesCobroMarcados.reduce((a,r)=>a + (r.total||0), 0);
-  const totalFacturasImpagas = facturasImpagas.reduce((a,r)=>a + (r.total||0), 0);
+  const totalFacturasImpagas = facturasImpagas.reduce((a,r)=>a + montoAdeudado(r), 0);
 
   cobradasEsteMes = todosLosDocs.filter(rec => rec.fechaCobro && rec.fechaCobro !== 'SI' && rec.fechaCobro.slice(0,7) === mesRef && rec.total && rec.facNro && rec.facNro !== '');
   const totalCobradasEsteMes = cobradasEsteMes.reduce((a,r)=>a + (r.total||0), 0);
@@ -880,7 +901,7 @@ function renderKPIs(){
     .sort((a,b) => new Date(a.fechaFact) - new Date(b.fechaFact)); // más antigua primero
   const alertaEl = document.getElementById('alertaMora');
   if (facturasEnMora.length > 0) {
-    const totalMora = facturasEnMora.reduce((a,r) => a + (r.total||0), 0);
+    const totalMora = facturasEnMora.reduce((a,r) => a + montoAdeudado(r), 0);
     const clientes = [...new Set(facturasEnMora.map(r => toTitleCase(r.razonSocial || 'sin cliente')))];
     const clientesTxt = clientes.length <= 2
       ? clientes.join(' y ')
@@ -941,7 +962,7 @@ function renderWidgetsDashboard(mesRef){
   porOrden.forEach(r => {
     const nombre = toTitleCase(r.razonSocial || 'Sin cliente');
     if (!porCliente[nombre]) porCliente[nombre] = { nombre, total: 0, cantidad: 0, detalle: [] };
-    porCliente[nombre].total += (r.total || 0);
+    porCliente[nombre].total += montoAdeudado(r);
     porCliente[nombre].cantidad += 1;
     porCliente[nombre].detalle.push(r);
   });
@@ -953,7 +974,7 @@ function renderWidgetsDashboard(mesRef){
   wrapDeudores.innerHTML = top5.length
     ? top5.map((d, i) => {
         const tooltip = d.detalle
-          .map(r => `OR ${r.orden}  ·  Fac. ${r.facNro || r.facSN || 'sin factura'}  ·  ${fmtMoney(r.total||0)}`)
+          .map(r => `OR ${r.orden}  ·  Fac. ${r.facNro || r.facSN || 'sin factura'}  ·  Debe ${fmtMoney(montoAdeudado(r))}`)
           .join('\n');
         return `
         <div class="deudor-row">
@@ -1078,7 +1099,7 @@ function mostrarDetalleKPI(tipo, color){
     lista = pendientesCobroMarcados;
     titulo = 'Pendiente de facturación';
   } else if (tipo === 'facturasImpagas') {
-    lista = facturasImpagas;
+    lista = facturasImpagas.map(o => ({ ...o, total: montoAdeudado(o), totalFacturado: o.total }));
     titulo = 'Facturas pendientes de pago';
     fechaCol = (o) => o.fechaFact;
   } else if (tipo === 'cobradasMes') {
@@ -1139,7 +1160,17 @@ function getColumnasDetalle(tipo){
       { key:'importe', label:'Importe', sortable:true, align:'center' },
     ];
   }
-  if (tipo === 'facturasImpagas' || tipo === 'facturado') {
+  if (tipo === 'facturasImpagas') {
+    return [
+      { key:'orden', label:'Orden', sortable:true, align:'center' },
+      { key:'cliente', label:'Cliente', sortable:true, align:'left' },
+      { key:'vehiculo', label:'Vehículo', sortable:false, align:'left' },
+      { key:'factura', label:'Factura', sortable:false, align:'center' },
+      { key:'fecha', label:'Fecha', sortable:true, align:'center' },
+      { key:'importe', label:'Saldo pendiente', sortable:true, align:'center' },
+    ];
+  }
+  if (tipo === 'facturado') {
     return [
       { key:'orden', label:'Orden', sortable:true, align:'center' },
       { key:'cliente', label:'Cliente', sortable:true, align:'left' },
@@ -1259,7 +1290,8 @@ document.getElementById('btnExportarExcel').addEventListener('click', async () =
     sheet.getCell('C2').font = { size: 10, italic: true, color: { argb: 'FF6B6B6B' } };
 
     const filaHeader = 5;
-    const encabezados = ['Orden', 'Cliente', 'Vehículo', 'Dominio', 'Factura', 'Fecha Factura', 'Importe'];
+    const columnaImporte = titulo === 'Facturas pendientes de pago' ? 'Saldo pendiente' : 'Importe';
+    const encabezados = ['Orden', 'Cliente', 'Vehículo', 'Dominio', 'Factura', 'Fecha Factura', columnaImporte];
     sheet.getRow(filaHeader).values = encabezados;
     sheet.getRow(filaHeader).eachCell(cell => {
       cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -2049,7 +2081,7 @@ document.getElementById('btnProcesarPDF').addEventListener('click', async () => 
       // solo al crearla por primera vez, dejamos vacios los campos de facturacion
       Object.assign(datosOrden, {
         condicion: '', facNro: '', facSN: '', fechaFact: '',
-        fechaCobro: '', pendienteCobro: true, facturaImpaga: false,
+        fechaCobro: '', pendienteCobro: true, facturaImpaga: false, montoCobrado: 0,
       });
     }
     await refOrden.set(datosOrden, { merge: true });
@@ -2421,19 +2453,31 @@ $('buscarDominio').addEventListener('keydown', (e) => {
 
 // ============== COBRANZA ==============
 let cobOrdenActual = null;
+let cobOrdenTotal = 0;
+
+function actualizarSaldoCobForm(){
+  const cobrado = parseMiles($('cobMontoCobrado').value);
+  const saldo = Math.max(0, cobOrdenTotal - cobrado);
+  const el = $('cobSaldoPendiente');
+  el.textContent = fmtMoney(saldo);
+  el.style.color = saldo > 0 ? 'var(--warn)' : 'var(--green)';
+}
 
 function cargarOrdenEnCobForm(orden, d){
   cobOrdenActual = orden;
+  cobOrdenTotal = d.total || 0;
   setCobFechaFact(d.fechaFact || '');
   setCobCondicionUI(d.condicion || '');
   $('cobFacNro').value = d.facNro || '';
   $('cobFacSN').value = d.facSN || '';
   setCobFechaCobro(d.fechaCobro || '');
   $('cobPendienteCobro').checked = !!d.pendienteCobro;
-  $('cobFacturaImpaga').checked = !!d.facturaImpaga;
+  const cobradoActual = getMontoCobrado(d);
+  $('cobMontoCobrado').value = cobradoActual ? cobradoActual.toLocaleString('es-AR') : '';
+  actualizarSaldoCobForm();
 
   $('cobFormTitulo').textContent = `OR ${orden}`;
-  $('cobFormSub').textContent = `${d.razonSocial || 'Sin cliente'} · ${d.vehiculo || ''} ${d.dominio ? '· ' + d.dominio : ''} · ${fmtMoney(d.total||0)}`;
+  $('cobFormSub').textContent = `${d.razonSocial || 'Sin cliente'} · ${d.vehiculo || ''} ${d.dominio ? '· ' + d.dominio : ''} · Total ${fmtMoney(d.total||0)}`;
   $('cobFormPanel').style.display = 'block';
   $('cobResultadosMultiples').innerHTML = '';
   $('cobResultadosOrden').style.display = 'none';
@@ -2443,12 +2487,26 @@ function cargarOrdenEnCobForm(orden, d){
   $('cobFormPanel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
+$('cobMontoCobrado').addEventListener('input', actualizarSaldoCobForm);
+$('cobMontoCobrado').addEventListener('focus', () => {
+  const n = parseMiles($('cobMontoCobrado').value);
+  $('cobMontoCobrado').value = n ? n : '';
+});
+$('cobMontoCobrado').addEventListener('blur', () => {
+  const n = parseMiles($('cobMontoCobrado').value);
+  $('cobMontoCobrado').value = n ? n.toLocaleString('es-AR') : '';
+  actualizarSaldoCobForm();
+});
+
 function limpiarCobForm(){
   cobOrdenActual = null;
+  cobOrdenTotal = 0;
   $('cobForm').reset();
   setCobFechaFact('');
   setCobCondicionUI('');
   setCobFechaCobro('');
+  $('cobMontoCobrado').value = '';
+  actualizarSaldoCobForm();
   $('cobFormPanel').style.display = 'none';
   $('cobBuscarHint').textContent = '';
   $('cobResultadosMultiples').innerHTML = '';
@@ -2643,14 +2701,18 @@ $('cobForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!cobOrdenActual) return;
 
+  const montoCobrado = Math.max(0, Math.min(parseMiles($('cobMontoCobrado').value), cobOrdenTotal));
+  const facNroTrim = $('cobFacNro').value.trim();
+
   const rec = {
     fechaFact: $('cobFechaFact').value ? $('cobFechaFact').value + '-01' : '',
     condicion: $('cobCondicion').value.trim(),
-    facNro: $('cobFacNro').value.trim(),
+    facNro: facNroTrim,
     facSN: $('cobFacSN').value.trim(),
     fechaCobro: $('cobFechaCobro').value ? ($('cobFechaCobro').value === 'SI' ? 'SI' : $('cobFechaCobro').value + '-01') : '',
     pendienteCobro: $('cobPendienteCobro').checked,
-    facturaImpaga: $('cobFacturaImpaga').checked,
+    montoCobrado: montoCobrado,
+    facturaImpaga: facNroTrim !== '' && montoCobrado < cobOrdenTotal,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
   };
 
