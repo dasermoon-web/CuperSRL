@@ -648,16 +648,17 @@ const parseMiles = (str) => {
 // del checkbox histórico "facturaImpaga": impaga = nada cobrado, no impaga = cobrada por completo.
 function getMontoCobrado(o){
   if (typeof o.montoCobrado === 'number') return Math.max(0, Math.min(o.montoCobrado, o.total || 0));
-  return o.facturaImpaga ? 0 : (o.total || 0);
+  if (o.facturaImpaga) return 0; // dato viejo: AG="NO", nada cobrado
+  if (o.pendienteCobro) return 0; // nunca se facturó ni se cobró nada todavía
+  return o.total || 0; // dato viejo sin marcas: se asume cobrada por completo
 }
 function getSaldoPendiente(o){
   return Math.max(0, (o.total || 0) - getMontoCobrado(o));
 }
-// Cuánto se le debe realmente al taller por esta OR: si todavía no tiene factura,
-// se debe el total completo; si ya está facturada, el saldo pendiente de cobro.
+// Cuánto se le debe realmente al taller por esta OR — un solo número, sin importar
+// si ya tiene factura, si es un anticipo, o si el checkbox de facturación está tildado o no.
 function montoAdeudado(o){
-  const facturada = o.facNro && o.facNro !== '';
-  return facturada ? getSaldoPendiente(o) : (o.total || 0);
+  return getSaldoPendiente(o);
 }
 const fmtMoneyShort = (n) => {
   if (Math.abs(n) >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M';
@@ -755,7 +756,7 @@ function procesarDatos(docs){
   openOrders = [];
   pendientesFacturar = [];
   pendientesCobroMarcados = docs.filter(rec => rec.pendienteCobro && rec.total);
-  facturasImpagas = docs.filter(rec => rec.facturaImpaga && rec.total);
+  facturasImpagas = docs.filter(rec => rec.facNro && rec.facNro !== '' && rec.total && getSaldoPendiente(rec) > 0);
 
   docs.forEach(rec => {
     // --- OR Cerradas / OR Cobradas (col. A = fecha de cierre, col. AG = facturaImpaga) ---
@@ -764,7 +765,7 @@ function procesarDatos(docs){
       if (!cierresMap[mesCierre]) cierresMap[mesCierre] = { Mes: mesCierre, CantidadCerradas: 0, ImporteCerrado: 0, ImporteCobrado: 0 };
       cierresMap[mesCierre].CantidadCerradas += 1;
       cierresMap[mesCierre].ImporteCerrado += (rec.total || 0);
-      if (rec.fechaCobro && !rec.facturaImpaga) cierresMap[mesCierre].ImporteCobrado += (rec.total || 0); // col. AG "NO" o vacía → sin cobrar
+      if (rec.fechaCobro && getSaldoPendiente(rec) <= 0) cierresMap[mesCierre].ImporteCobrado += (rec.total || 0); // cobrada = saldo en $0
     }
 
     // --- Facturas cobradas por mes (para la tendencia de "Fac. Cobradas") ---
@@ -877,7 +878,7 @@ function renderKPIs(){
   const mesRef = dashboardMes || `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}`;
   const datosMes = monthlyData.find(m => m.Mes === mesRef) || { Mes: mesRef, Facturado: 0, Conciliado: 0 };
   const totalPendFacturar = pendientesFacturar.reduce((a,r)=>a + (r.total||0), 0);
-  const totalPendFacturacion = pendientesCobroMarcados.reduce((a,r)=>a + (r.total||0), 0);
+  const totalPendFacturacion = pendientesCobroMarcados.reduce((a,r)=>a + getSaldoPendiente(r), 0);
   const totalFacturasImpagas = facturasImpagas.reduce((a,r)=>a + montoAdeudado(r), 0);
 
   cobradasEsteMes = todosLosDocs.filter(rec => rec.fechaCobro && rec.fechaCobro !== 'SI' && rec.fechaCobro.slice(0,7) === mesRef && rec.total && rec.facNro && rec.facNro !== '');
@@ -953,8 +954,8 @@ function renderKPIs(){
 // ---- Widget: Top 5 deudores ----
 function renderWidgetsDashboard(mesRef){
   const porOrden = new Map();
-  [...pendientesCobroMarcados, ...facturasImpagas].forEach(r => {
-    if (!r.total) return;
+  todosLosDocs.forEach(r => {
+    if (!r.total || getSaldoPendiente(r) <= 0) return;
     if (!porOrden.has(r.orden)) porOrden.set(r.orden, r);
   });
 
@@ -1096,7 +1097,7 @@ function mostrarDetalleKPI(tipo, color){
     titulo = `Conciliado — ${monthLabel(mesRef)}`;
     fechaCol = (o) => o.fechaFact;
   } else if (tipo === 'pendFacturacion') {
-    lista = pendientesCobroMarcados;
+    lista = pendientesCobroMarcados.map(o => ({ ...o, total: getSaldoPendiente(o), totalFacturado: o.total }));
     titulo = 'Pendiente de facturación';
   } else if (tipo === 'facturasImpagas') {
     lista = facturasImpagas.map(o => ({ ...o, total: montoAdeudado(o), totalFacturado: o.total }));
@@ -1290,7 +1291,7 @@ document.getElementById('btnExportarExcel').addEventListener('click', async () =
     sheet.getCell('C2').font = { size: 10, italic: true, color: { argb: 'FF6B6B6B' } };
 
     const filaHeader = 5;
-    const columnaImporte = titulo === 'Facturas pendientes de pago' ? 'Saldo pendiente' : 'Importe';
+    const columnaImporte = (titulo === 'Facturas pendientes de pago' || titulo === 'Pendiente de facturación') ? 'Saldo pendiente' : 'Importe';
     const encabezados = ['Orden', 'Cliente', 'Vehículo', 'Dominio', 'Factura', 'Fecha Factura', columnaImporte];
     sheet.getRow(filaHeader).values = encabezados;
     sheet.getRow(filaHeader).eachCell(cell => {
@@ -1482,7 +1483,7 @@ function mostrarOrdenesDelMes(mesKey, label){
   document.getElementById('detalleMesOrdenesTitulo').textContent = `OR cerradas — ${label} (${ordenes.length})`;
   document.getElementById('detalleMesOrdenesBody').innerHTML = ordenes.length
     ? ordenes.map(o => {
-        const cobrada = !!o.fechaCobro && !o.facturaImpaga;
+        const cobrada = !!o.fechaCobro && getSaldoPendiente(o) <= 0;
         return `
           <tr>
             <td>${o.orden}</td>
@@ -1549,7 +1550,7 @@ document.getElementById('btnExportarMesOrdenes').addEventListener('click', async
     let filaActual = filaHeader + 1;
     let total = 0;
     lista.forEach(o => {
-      const cobrada = !!o.fechaCobro && !o.facturaImpaga;
+      const cobrada = !!o.fechaCobro && getSaldoPendiente(o) <= 0;
       const fila = sheet.getRow(filaActual);
       fila.values = [
         o.orden,
