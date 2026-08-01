@@ -492,20 +492,8 @@
       <div class="panel-sub" id="cobFormSub"></div>
 
       <form id="cobForm">
-        <label>Mes de facturación o conciliación</label>
-        <div class="month-picker-wrap" style="position:relative;">
-          <button type="button" id="cobFechaFactBtn" class="btn secondary" style="width:100%; text-align:left; font-weight:400;">Sin facturar / conciliar</button>
-          <input type="hidden" id="cobFechaFact">
-          <div id="cobFechaFactPanel" style="display:none; position:absolute; top:calc(100% + 4px); left:0; z-index:30; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:14px; width:260px; box-shadow:0 8px 24px rgba(0,0,0,0.4);">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-              <button type="button" id="cobFechaFactPrevYear" class="btn secondary" style="padding:4px 12px;">‹</button>
-              <span id="cobFechaFactYearLabel" style="font-family:var(--mono); color:var(--green); font-size:15px;"></span>
-              <button type="button" id="cobFechaFactNextYear" class="btn secondary" style="padding:4px 12px;">›</button>
-            </div>
-            <div id="cobFechaFactMonthsGrid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:6px;"></div>
-            <button type="button" id="cobFechaFactClear" class="btn secondary" style="width:100%; margin-top:12px;">Vaciar (no facturado)</button>
-          </div>
-        </div>
+        <label>Fecha de facturación o conciliación</label>
+        <input type="date" id="cobFechaFact">
         <div class="hint">Vacío = todavía no se facturó ni concilió</div>
 
         <label>Modo de pago</label>
@@ -773,6 +761,12 @@ const fmtISOaDDMMAA = (isoStr) => {
   const m = (''+isoStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!m) return isoStr; // si no tiene formato de fecha (ej. "N"), lo dejamos tal cual
   return `${m[3]}/${m[2]}/${m[1].slice(2)}`;
+};
+const fmtISOaMMAA = (isoStr) => {
+  if (!isoStr) return '';
+  const m = (''+isoStr).match(/^(\d{4})-(\d{2})/);
+  if (!m) return isoStr;
+  return `${m[2]}/${m[1].slice(2)}`;
 };
 
 let monthlyData = [];
@@ -2355,7 +2349,7 @@ function crearSelectorMes(prefijo, textoVacio){
     renderLabel();
   };
 }
-const setCobFechaFact = crearSelectorMes('cobFechaFact', 'Sin facturar / conciliar');
+function setCobFechaFact(valor){ $('cobFechaFact').value = valor || ''; }
 const setCobFechaCobro = crearSelectorMes('cobFechaCobro', 'Sin cobrar');
 
 function ocultarResultados(){
@@ -2837,7 +2831,7 @@ $('cobForm').addEventListener('submit', async (e) => {
   const facNroTrim = $('cobFacNro').value.trim();
 
   const rec = {
-    fechaFact: $('cobFechaFact').value ? $('cobFechaFact').value + '-01' : '',
+    fechaFact: $('cobFechaFact').value || '',
     condicion: $('cobCondicion').value.trim(),
     facNro: facNroTrim,
     facSN: $('cobFacSN').value.trim(),
