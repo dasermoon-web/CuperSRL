@@ -78,6 +78,17 @@
   .main-content{ flex:1; min-width:0; }
   .panel-content{ display:none; }
   .panel-content.active{ display:block; animation: panelIn .28s ease; }
+
+  /* Modo enfoque: al entrar a una sección, el sidebar se esconde y el panel ocupa todo el ancho */
+  .app-layout.focus-mode .sidebar{ display:none; }
+  #volverBtn{
+    display:none; align-items:center; gap:6px; margin-bottom:16px;
+    background:var(--panel-2); border:1px solid var(--line); color:var(--text-dim);
+    font-size:12px; letter-spacing:.5px; padding:9px 16px; border-radius:8px; cursor:pointer;
+    text-transform:uppercase; transition: background .15s ease, color .15s ease, border-color .15s ease;
+  }
+  #volverBtn:hover{ background:var(--green-soft); border-color:var(--green); color:var(--green); }
+  .app-layout.focus-mode #volverBtn{ display:inline-flex; }
   @keyframes panelIn{
     from{ opacity:0; transform:translateY(10px) scale(.98); }
     to{ opacity:1; transform:translateY(0) scale(1); }
@@ -292,6 +303,8 @@
       <button class="nav-btn" data-tab="usuarios"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Usuarios</button>
     </div>
     <div class="main-content">
+
+  <button type="button" id="volverBtn">‹ Volver</button>
 
   <!-- ================= INICIO (pantalla de bienvenida) ================= -->
   <div class="panel-content active" id="view-inicio">
@@ -652,6 +665,8 @@ function limpiarPanelDominio(){
   if (cont) cont.innerHTML = '';
 }
 
+const appLayoutEl = document.querySelector('.app-layout');
+
 document.querySelectorAll('.nav-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     const anterior = document.querySelector('.nav-btn.active');
@@ -664,9 +679,24 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
     document.querySelectorAll('.panel-content').forEach(v => v.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('view-' + btn.dataset.tab).classList.add('active');
+    appLayoutEl.classList.add('focus-mode'); // esconde el sidebar y el panel pasa a ancho completo
     cerrarDetalleKPI(); // el detalle de la sección anterior no debe quedar abierto acá
     if (monthlyData.length > 0) renderKPIs(); // por si cambiaron datos mientras se navegaba
   });
+});
+
+document.getElementById('volverBtn').addEventListener('click', () => {
+  const anterior = document.querySelector('.nav-btn.active');
+  const tabAnterior = anterior ? anterior.dataset.tab : null;
+  if (tabAnterior === 'carga') limpiarPanelCarga();
+  if (tabAnterior === 'dominio') limpiarPanelDominio();
+  if (tabAnterior === 'cobranza' && window.limpiarPanelCobranza) limpiarPanelCobranza();
+
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.panel-content').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-inicio').classList.add('active');
+  appLayoutEl.classList.remove('focus-mode'); // vuelve a mostrar el sidebar con los 5 botones
+  cerrarDetalleKPI();
 });
 
 // ============== HELPERS ==============
@@ -814,26 +844,23 @@ function procesarDatos(docs){
       cobradasMap[mesCobro] = (cobradasMap[mesCobro] || 0) + (rec.total || 0);
     }
 
-    const abierta = !rec.fechaCierre || rec.fechaCierre === 'N';
-    if (abierta) {
+    if (!rec.fechaCierre || rec.fechaCierre === 'N') {
       openOrders.push(rec);
-    } else if (!rec.fechaFact || rec.fechaFact === '') {
+      return;
+    }
+    if (!rec.fechaFact || rec.fechaFact === '') {
       if (rec.total && rec.total !== 0) pendientesFacturar.push(rec);
+      return;
     }
-
-    // Facturado / Conciliado por mes: cuenta si tiene fecha de factura, esté o no
-    // cerrada la orden (puede facturarse antes de cerrarse formalmente).
-    if (rec.fechaFact && rec.fechaFact !== '') {
-      const mes = rec.fechaFact.slice(0,7);
-      if (!mesesMap[mes]) {
-        mesesMap[mes] = { Mes: mes, Facturado:0, Conciliado:0, SinClasificar:0, Cobrado:0, CobradoFacturado:0, Cantidad:0 };
-      }
-      const cat = categoria(rec);
-      mesesMap[mes][cat] += (rec.total || 0);
-      if (rec.fechaCobro) mesesMap[mes].Cobrado += (rec.total || 0);
-      if (rec.fechaCobro && cat === 'Facturado') mesesMap[mes].CobradoFacturado += (rec.total || 0);
-      mesesMap[mes].Cantidad += 1;
+    const mes = rec.fechaFact.slice(0,7);
+    if (!mesesMap[mes]) {
+      mesesMap[mes] = { Mes: mes, Facturado:0, Conciliado:0, SinClasificar:0, Cobrado:0, CobradoFacturado:0, Cantidad:0 };
     }
+    const cat = categoria(rec);
+    mesesMap[mes][cat] += (rec.total || 0);
+    if (rec.fechaCobro) mesesMap[mes].Cobrado += (rec.total || 0);
+    if (rec.fechaCobro && cat === 'Facturado') mesesMap[mes].CobradoFacturado += (rec.total || 0);
+    mesesMap[mes].Cantidad += 1;
   });
 
   cobradasPorMes = cobradasMap;
