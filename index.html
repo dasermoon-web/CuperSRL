@@ -309,8 +309,15 @@
   <!-- ================= INICIO (pantalla de bienvenida) ================= -->
   <div class="panel-content active" id="view-inicio">
     <div id="alertaMoraInicio"></div>
-    <div style="border:2px dashed var(--line); border-radius:10px; padding:50px 20px; text-align:center; color:var(--text-dim); font-size:13px; background:var(--panel);">
-      📊 Gráficos — a definir más adelante
+    <div class="panel" id="panelGraficoInicio">
+      <div class="panel-head"><h2>Últimos 6 meses — OR cerradas, facturadas/conciliadas y cobradas</h2></div>
+      <div class="panel-sub">Monto de las órdenes cerradas cada mes, cuánto de eso ya quedó facturado o conciliado, y cuánto ya se cobró.</div>
+      <div id="graficoInicioScroll" style="overflow-x:auto;"></div>
+      <div style="display:flex; gap:18px; flex-wrap:wrap; margin-top:10px; font-family:var(--mono); font-size:11px; color:var(--text-dim);">
+        <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:var(--green); margin-right:5px;"></span>Cerrado</span>
+        <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:var(--teal); margin-right:5px;"></span>Facturado + Conciliado</span>
+        <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:rgb(90,120,255); margin-right:5px;"></span>Cobrado</span>
+      </div>
     </div>
   </div>
 
@@ -832,9 +839,10 @@ function procesarDatos(docs){
     // --- OR Cerradas / OR Cobradas (col. A = fecha de cierre, col. AG = facturaImpaga) ---
     if (rec.fechaCierre && rec.fechaCierre !== 'N') {
       const mesCierre = rec.fechaCierre.slice(0,7);
-      if (!cierresMap[mesCierre]) cierresMap[mesCierre] = { Mes: mesCierre, CantidadCerradas: 0, ImporteCerrado: 0, ImporteCobrado: 0 };
+      if (!cierresMap[mesCierre]) cierresMap[mesCierre] = { Mes: mesCierre, CantidadCerradas: 0, ImporteCerrado: 0, ImporteCobrado: 0, ImporteFacturadoConciliado: 0 };
       cierresMap[mesCierre].CantidadCerradas += 1;
       cierresMap[mesCierre].ImporteCerrado += (rec.total || 0);
+      if (categoria(rec) !== 'SinClasificar') cierresMap[mesCierre].ImporteFacturadoConciliado += (rec.total || 0); // facturada o conciliada, sin importar si ya se cobró
       if (rec.fechaCobro && getSaldoPendiente(rec) <= 0) cierresMap[mesCierre].ImporteCobrado += (rec.total || 0); // cobrada = saldo en $0
     }
 
@@ -894,7 +902,79 @@ function render(){
   renderKPIsOrdenes();
   renderKPIsCobranza();
   renderAlertaMoraInicio();
+  renderGraficoInicio();
   cerrarDetalleKPI();
+}
+
+// ---------- Mini gráfico de inicio: OR cerradas / facturadas+conciliadas / cobradas, últimos 6 meses ----------
+function renderGraficoInicio(){
+  const contenedor = document.getElementById('graficoInicioScroll');
+  if (!contenedor) return;
+
+  const hoy = new Date();
+  const clavesUltimos6 = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+    clavesUltimos6.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+  }
+  const NOMBRES_MES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const datosPorMes = clavesUltimos6.map(mesKey => {
+    const encontrado = monthlyCierres.find(r => r.Mes === mesKey);
+    const nombre = NOMBRES_MES[parseInt(mesKey.slice(5,7), 10) - 1] + ' ' + mesKey.slice(2,4);
+    return {
+      nombre, mesKey,
+      Cantidad: encontrado ? encontrado.CantidadCerradas : 0,
+      Cerrado: encontrado ? encontrado.ImporteCerrado : 0,
+      FacturadoConciliado: encontrado ? encontrado.ImporteFacturadoConciliado : 0,
+      Cobrado: encontrado ? encontrado.ImporteCobrado : 0,
+    };
+  });
+
+  const height = 260, padTop = 24, padBottom = 32, padLeft = 60, padRight = 16;
+  const plotH = height - padTop - padBottom;
+  const width = Math.max(contenedor.clientWidth || 700, 560);
+  const plotW = width - padLeft - padRight;
+  const step = plotW / 6;
+  const grupoW = Math.min(step * 0.72, 150);
+  const barW = grupoW / 3.6;
+
+  const maxVal = Math.max(1, ...datosPorMes.map(d => d.Cerrado));
+  const magnitude = Math.pow(10, Math.floor(Math.log10(maxVal)));
+  const niceMax = Math.ceil(maxVal / (magnitude/2)) * (magnitude/2);
+  const yScale = (v) => plotH - Math.min(v, niceMax) / niceMax * plotH;
+
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" height="${height}" preserveAspectRatio="none">`;
+
+  for (let i=0; i<=4; i++){
+    const v = niceMax * i / 4;
+    const y = padTop + yScale(v);
+    svg += `<line x1="${padLeft}" y1="${y}" x2="${width-padRight}" y2="${y}" stroke="rgba(255,255,255,0.06)"></line>`;
+    svg += `<text x="${padLeft-8}" y="${y+3}" text-anchor="end" font-family="monospace" font-size="10" fill="var(--text-dim)">${fmtMoneyShort(v)}</text>`;
+  }
+
+  const barra = (x, valor, color, titulo) => {
+    const h = plotH - yScale(valor);
+    const y = padTop + plotH - h;
+    return `<rect x="${x}" y="${y}" width="${barW}" height="${Math.max(h,0)}" rx="2" fill="${color}"><title>${titulo}</title></rect>`;
+  };
+
+  datosPorMes.forEach((d, i) => {
+    const xGrupo = padLeft + step*i + (step - grupoW)/2;
+    svg += `<rect x="${padLeft + step*i}" y="${padTop}" width="${step}" height="${plotH}" fill="transparent" style="cursor:pointer;" data-mes="${d.mesKey}" data-label="${d.nombre}"><title>Ver detalle de ${d.nombre}</title></rect>`;
+    svg += barra(xGrupo, d.Cerrado, 'var(--green)', `Cerrado ${d.nombre}: ${d.Cantidad} OR por ${fmtMoney(d.Cerrado)}`);
+    svg += barra(xGrupo + barW*1.3, d.FacturadoConciliado, 'var(--teal)', `Facturado + Conciliado ${d.nombre}: ${fmtMoney(d.FacturadoConciliado)}`);
+    svg += barra(xGrupo + barW*2.6, d.Cobrado, 'rgb(90,120,255)', `Cobrado ${d.nombre}: ${fmtMoney(d.Cobrado)}`);
+    svg += `<text x="${xGrupo + grupoW/2}" y="${height-padBottom+16}" text-anchor="middle" font-family="monospace" font-size="10" fill="var(--text-dim)" style="pointer-events:none;">${d.nombre}</text>`;
+  });
+
+  svg += `</svg>`;
+  contenedor.innerHTML = svg;
+  contenedor.querySelectorAll('rect[data-mes]').forEach(rect => {
+    rect.addEventListener('click', () => {
+      document.querySelector('.nav-btn[data-tab="carga"]').click();
+      mostrarOrdenesDelMes(rect.dataset.mes, rect.dataset.label);
+    });
+  });
 }
 
 // Selector de mes genérico y reutilizable: cada sección tiene su propio mes independiente,
