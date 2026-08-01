@@ -69,7 +69,7 @@
   .nav-btn{
     display:flex; align-items:center; gap:10px; text-align:left;
     background:var(--panel); border:1px solid var(--line); color:var(--text-dim);
-    font-family:var(--mono); font-size:12px; letter-spacing:1px; padding:12px 14px;
+    font-size:12px; letter-spacing:1px; padding:12px 14px;
     border-radius:8px; cursor:pointer; text-transform:uppercase;
     transition: background .18s ease, color .18s ease, border-color .18s ease, transform .12s ease;
   }
@@ -1257,7 +1257,7 @@ function mostrarDetalleKPI(tipo, color){
 
   // Exportar a Excel: solo disponible para estas dos tarjetas
   const btnExport = document.getElementById('btnExportarExcel');
-  if (tipo === 'pendFacturacion' || tipo === 'facturasImpagas') {
+  if (tipo === 'pendFacturacion' || tipo === 'facturasImpagas' || tipo === 'facturado') {
     exportData = { titulo, lista, fechaCol };
     btnExport.style.display = 'inline-block';
   } else {
@@ -1281,7 +1281,7 @@ function getColumnasDetalle(tipo){
       { key:'orden', label:'Orden', sortable:true, align:'center' },
       { key:'cliente', label:'Cliente', sortable:true, align:'left' },
       { key:'vehiculo', label:'Vehículo', sortable:false, align:'left' },
-      { key:'factura', label:'Factura', sortable:false, align:'center' },
+      { key:'factura', label:'Factura', sortable:true, align:'center' },
       { key:'condicion', label:'Modo de pago', sortable:false, align:'center' },
       { key:'importe', label:'Importe', sortable:true, align:'center' },
     ];
@@ -1291,7 +1291,7 @@ function getColumnasDetalle(tipo){
       { key:'orden', label:'Orden', sortable:true, align:'center' },
       { key:'cliente', label:'Cliente', sortable:true, align:'left' },
       { key:'vehiculo', label:'Vehículo', sortable:false, align:'left' },
-      { key:'factura', label:'Factura', sortable:false, align:'center' },
+      { key:'factura', label:'Factura', sortable:true, align:'center' },
       { key:'fecha', label:'Fecha', sortable:true, align:'center' },
       { key:'importe', label:'Saldo pendiente', sortable:true, align:'center' },
     ];
@@ -1301,7 +1301,7 @@ function getColumnasDetalle(tipo){
       { key:'orden', label:'Orden', sortable:true, align:'center' },
       { key:'cliente', label:'Cliente', sortable:true, align:'left' },
       { key:'vehiculo', label:'Vehículo', sortable:false, align:'left' },
-      { key:'factura', label:'Factura', sortable:false, align:'center' },
+      { key:'factura', label:'Factura', sortable:true, align:'center' },
       { key:'fecha', label:'Fecha', sortable:true, align:'center' },
       { key:'importe', label:'Importe', sortable:true, align:'center' },
     ];
