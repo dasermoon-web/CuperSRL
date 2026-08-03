@@ -930,7 +930,7 @@ function renderGraficoInicio(){
     };
   });
 
-  const height = 340, padTop = 46, padBottom = 32, padLeft = 70, padRight = 20;
+  const height = 340, padTop = 46, padBottom = 46, padLeft = 70, padRight = 20;
   const plotH = height - padTop - padBottom;
   const width = Math.max(contenedor.clientWidth || 900, 560);
   const plotW = width - padLeft - padRight;
@@ -951,8 +951,10 @@ function renderGraficoInicio(){
     svg += `<text x="${padLeft-8}" y="${y+3}" text-anchor="end" font-family="monospace" font-size="10" fill="var(--text-dim)">${fmtMoneyShort(v)}</text>`;
   }
 
-  // Barras: monto de OR cerradas
+  // Barras: monto de OR cerradas — el valor va siempre abajo (fila fija), para no cruzarse con las líneas
   const centros = [];
+  const yValorBarra = padTop + plotH + 14;
+  const yNombreMes = padTop + plotH + 30;
   datosPorMes.forEach((d, i) => {
     const xCentro = padLeft + step*i + step/2;
     centros.push(xCentro);
@@ -962,12 +964,13 @@ function renderGraficoInicio(){
     svg += `<rect x="${padLeft + step*i}" y="${padTop}" width="${step}" height="${plotH}" fill="transparent" style="cursor:pointer;" data-mes="${d.mesKey}" data-label="${d.nombre}"><title>Ver detalle de ${d.nombre}</title></rect>`;
     svg += `<rect x="${x}" y="${y}" width="${barW}" height="${Math.max(h,0)}" rx="3" fill="var(--green)" style="pointer-events:none;"><title>Cerrado ${d.nombre}: ${d.Cantidad} OR por ${fmtMoney(d.Cerrado)}</title></rect>`;
     if (d.Cantidad > 0) {
-      svg += `<text x="${xCentro}" y="${y-10}" text-anchor="middle" font-family="monospace" font-size="12" font-weight="700" fill="var(--green)" style="pointer-events:none;">${fmtMoneyShort(d.Cerrado)}</text>`;
+      svg += `<text x="${xCentro}" y="${yValorBarra}" text-anchor="middle" font-family="monospace" font-size="12" font-weight="700" fill="var(--green)" style="pointer-events:none;">${fmtMoneyShort(d.Cerrado)}</text>`;
     }
-    svg += `<text x="${xCentro}" y="${height-padBottom+16}" text-anchor="middle" font-family="monospace" font-size="10" fill="var(--text-dim)" style="pointer-events:none;">${d.nombre}</text>`;
+    svg += `<text x="${xCentro}" y="${yNombreMes}" text-anchor="middle" font-family="monospace" font-size="10" fill="var(--text-dim)" style="pointer-events:none;">${d.nombre}</text>`;
   });
 
-  // Línea blanca: Facturado + Conciliado
+  // Línea blanca: Facturado + Conciliado (etiqueta siempre arriba del punto)
+  // Línea celeste: Cobrado (etiqueta siempre debajo del punto)
   const lineaSerie = (campo, color, colorTexto, offsetTextoY, valorAncla) => {
     const puntos = datosPorMes.map((d, i) => `${centros[i]},${padTop + yScale(d[campo])}`);
     let s = `<polyline points="${puntos.join(' ')}" fill="none" stroke="${color}" stroke-width="2.5"></polyline>`;
@@ -979,7 +982,7 @@ function renderGraficoInicio(){
     return s;
   };
   svg += lineaSerie('FacturadoConciliado', '#ffffff', '#ffffff', -12, 'Facturado + Conciliado');
-  svg += lineaSerie('Cobrado', 'rgb(90,150,255)', 'rgb(150,190,255)', 22, 'Cobrado');
+  svg += lineaSerie('Cobrado', 'rgb(90,150,255)', 'rgb(150,190,255)', 20, 'Cobrado');
 
   svg += `</svg>`;
   contenedor.innerHTML = svg;
@@ -1869,6 +1872,11 @@ async function actualizarSelloModificacion(){
   } catch (err) {
     console.warn('No se pudo actualizar el sello de modificación:', err.message);
   }
+  // Como acabamos de guardar algo, no tiene sentido preguntarle al sello si cambió algo:
+  // ya sabemos que sí. Recargamos directo (mismo costo que tocar "Actualizar ahora" a mano),
+  // así el Dashboard, Facturación y el gráfico de inicio quedan al día solos, sin que
+  // haya que acordarse de apretar el botón después de cada guardado.
+  await cargarDatos(true);
 }
 
 function normalizarUpdatedAt(docs){
