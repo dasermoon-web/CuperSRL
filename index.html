@@ -472,7 +472,7 @@
     <div class="dos-col-dashboard" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:16px; margin-bottom:24px;">
       <div class="panel" style="margin:0;">
         <div class="panel-head"><h2 style="font-size:14px;">⭐ Top 5 — Deudores</h2></div>
-        <div class="panel-sub" style="margin:-6px 0 12px;">Pendiente de facturación + facturas impagas, de mayor a menor importe.</div>
+        <div class="panel-sub" style="margin:-6px 0 12px;">OR sin cancelar + facturas impagas, de mayor a menor importe.</div>
         <div id="widgetTopDeudores"></div>
       </div>
       <div class="panel" style="margin:0;">
@@ -560,7 +560,7 @@
 
         <div class="checkbox-row">
           <input type="checkbox" id="cobPendienteCobro">
-          <label for="cobPendienteCobro">Marcar como "pendiente de facturación" (columna O del Excel)</label>
+          <label for="cobPendienteCobro">Marcar como "sin cancelar" (columna O del Excel)</label>
         </div>
 
         <label style="margin-top:14px;">Monto cobrado hasta ahora</label>
@@ -1177,7 +1177,7 @@ function renderKPIsCobranza(){
   const kpiRow = document.getElementById('kpi-row-cobranza');
   const kpis = [
     { tipo: 'conciliado', label: `Conciliado — ${monthLabel(datosMes.Mes)}`, value: fmtMoney(datosMes.Conciliado), color:'teal', icon:'check', sub:'Cobrado o conciliado sin factura', prev: conciliadoPrev, trend: conciliadoTrend },
-    { tipo: 'pendFacturacion', label: 'OR pendientes de facturación', value: fmtMoney(totalPendFacturacion), color: totalPendFacturacion>0 ? 'red':'green', icon:'clock', sub: totalPendFacturacion>0 ? 'Requieren facturar' : 'Todo al día' },
+    { tipo: 'pendFacturacion', label: 'OR sin cancelar', value: fmtMoney(totalPendFacturacion), color: totalPendFacturacion>0 ? 'red':'green', icon:'clock', sub: totalPendFacturacion>0 ? 'Requieren cobrar' : 'Todo al día' },
     { tipo: 'facturasImpagas', label: 'Facturas pendientes de cobro', value: fmtMoney(totalFacturasImpagas), color: totalFacturasImpagas>0 ? 'red':'green', icon:'warn', sub: totalFacturasImpagas>0 ? 'Cobrar cuanto antes' : 'Sin deuda' },
   ];
   kpiRow.innerHTML = kpis.map(k => `
@@ -1348,7 +1348,7 @@ function mostrarDetalleKPI(tipo, color){
     fechaCol = (o) => o.fechaFact;
   } else if (tipo === 'pendFacturacion') {
     lista = pendientesCobroMarcados.map(o => ({ ...o, total: getSaldoPendiente(o), totalFacturado: o.total }));
-    titulo = 'Pendiente de facturación';
+    titulo = 'OR sin cancelar';
   } else if (tipo === 'facturasImpagas') {
     lista = facturasImpagas.map(o => ({ ...o, total: montoAdeudado(o), totalFacturado: o.total }));
     titulo = 'Facturas pendientes de cobro';
@@ -1541,7 +1541,7 @@ document.getElementById('btnExportarExcel').addEventListener('click', async () =
     sheet.getCell('C2').font = { size: 10, italic: true, color: { argb: 'FF6B6B6B' } };
 
     const filaHeader = 5;
-    const columnaImporte = (titulo === 'Facturas pendientes de cobro' || titulo === 'Pendiente de facturación') ? 'Saldo pendiente' : 'Importe';
+    const columnaImporte = (titulo === 'Facturas pendientes de cobro' || titulo === 'OR sin cancelar') ? 'Saldo pendiente' : 'Importe';
     const encabezados = ['Orden', 'Cliente', 'Vehículo', 'Dominio', 'Factura', 'Fecha Factura', columnaImporte];
     sheet.getRow(filaHeader).values = encabezados;
     sheet.getRow(filaHeader).eachCell(cell => {
