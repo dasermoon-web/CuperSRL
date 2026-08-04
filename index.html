@@ -96,22 +96,22 @@
 
   #loadingMsg{ text-align:center; padding:60px 0; color:var(--text-dim); font-family:var(--mono); }
 
-  .kpis{ display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:14px; margin-bottom:28px; }
+  .kpis{ display:grid; grid-template-columns:repeat(auto-fit, minmax(175px, 1fr)); gap:12px; margin-bottom:24px; }
   .kpi{
     position:relative; background:var(--panel); border:1px solid var(--line); border-radius:10px;
-    padding:18px 18px 16px; cursor:pointer; transition:transform .15s ease, box-shadow .15s ease;
+    padding:14px 15px 12px; cursor:pointer; transition:transform .15s ease, box-shadow .15s ease;
   }
   .kpi:hover{ transform:translateY(-2px); }
-  .kpi .icon{ width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-bottom:12px; }
-  .kpi .icon svg{ width:20px; height:20px; }
-  .kpi .label{ font-size:11px; text-transform:uppercase; letter-spacing:1.5px; margin-bottom:8px; font-weight:700; }
-  .kpi .value{ font-family:var(--mono); font-size:26px; font-weight:800; line-height:1.1; margin-bottom:6px; }
-  .kpi .sub{ font-size:12px; color:var(--text-dim); }
-  .kpi .valuerow{ display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
-  .kpi .delta{ font-family:var(--mono); font-size:11px; font-weight:700; padding:2px 6px; border-radius:4px; }
+  .kpi .icon{ width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; margin-bottom:9px; }
+  .kpi .icon svg{ width:17px; height:17px; }
+  .kpi .label{ font-size:10px; text-transform:uppercase; letter-spacing:1.3px; margin-bottom:6px; font-weight:700; }
+  .kpi .value{ font-family:var(--mono); font-size:21px; font-weight:800; line-height:1.1; margin-bottom:4px; }
+  .kpi .sub{ font-size:11px; color:var(--text-dim); }
+  .kpi .valuerow{ display:flex; align-items:baseline; gap:7px; flex-wrap:wrap; }
+  .kpi .delta{ font-family:var(--mono); font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; }
   .kpi .delta.up{ color:#3ddc97; background:rgba(61,220,151,.14); }
   .kpi .delta.down{ color:#ff8f8f; background:rgba(255,92,92,.14); }
-  .kpi svg.spark{ margin-top:8px; display:block; }
+  .kpi svg.spark{ margin-top:6px; display:block; }
 
   .alerta-mora{
     background: linear-gradient(90deg, rgba(255,92,92,.16), rgba(255,92,92,.04));
@@ -947,7 +947,7 @@ function renderGraficoInicio(){
   const niceMax = Math.ceil(maxVal / (magnitude/2)) * (magnitude/2);
   const yScale = (v) => plotH - Math.min(v, niceMax) / niceMax * plotH;
 
-  let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" height="${height}" preserveAspectRatio="none">`;
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" height="${height}" preserveAspectRatio="none"><defs><linearGradient id="barGradInicio" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#4fe0a0"/><stop offset="100%" stop-color="#1a7a52"/></linearGradient></defs>`;
 
   for (let i=0; i<=4; i++){
     const v = niceMax * i / 4;
@@ -967,7 +967,7 @@ function renderGraficoInicio(){
     const h = plotH - yScale(d.Cerrado);
     const y = padTop + plotH - h;
     svg += `<rect x="${padLeft + step*i}" y="${padTop}" width="${step}" height="${plotH}" fill="transparent" style="cursor:pointer;" data-mes="${d.mesKey}" data-label="${d.nombre}"><title>Ver detalle de ${d.nombre}</title></rect>`;
-    svg += `<rect x="${x}" y="${y}" width="${barW}" height="${Math.max(h,0)}" rx="3" fill="var(--green)" style="pointer-events:none;"><title>Cerrado ${d.nombre}: ${d.Cantidad} OR por ${fmtMoney(d.Cerrado)}</title></rect>`;
+    svg += `<rect x="${x}" y="${y}" width="${barW}" height="${Math.max(h,0)}" rx="3" fill="url(#barGradInicio)" style="pointer-events:none;"><title>Cerrado ${d.nombre}: ${d.Cantidad} OR por ${fmtMoney(d.Cerrado)}</title></rect>`;
     if (d.Cantidad > 0) {
       svg += `<text x="${xCentro}" y="${yValorBarra}" text-anchor="middle" font-family="monospace" font-size="12" font-weight="700" fill="var(--green)" style="pointer-events:none;">${fmtMoneyShort(d.Cerrado)}</text>`;
     }
@@ -1649,7 +1649,7 @@ function renderGraficoAnual(anio){
   const niceMax = Math.ceil(maxVal / (magnitude/2)) * (magnitude/2);
   const yScale = (v) => plotH - (v / niceMax) * plotH;
 
-  let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" height="${height}" preserveAspectRatio="none">`;
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" height="${height}" preserveAspectRatio="none"><defs><linearGradient id="barGradAnual" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#4fe0a0"/><stop offset="100%" stop-color="#1a7a52"/></linearGradient></defs>`;
 
   for (let i=0; i<=4; i++){
     const v = niceMax * i / 4;
@@ -1668,7 +1668,7 @@ function renderGraficoAnual(anio){
     const yCerrado = padTop + plotH - cerradoH;
     // franja invisible que cubre toda la columna del mes, para que sea fácil de tocar aunque la barra sea chica
     svg += `<rect x="${padLeft + step*i}" y="${padTop}" width="${step}" height="${plotH}" fill="transparent" style="cursor:pointer;" data-mes="${d.mesKey}" data-label="${d.nombre} ${anio}"><title>Ver detalle de ${d.nombre}</title></rect>`;
-    svg += `<rect x="${x}" y="${yCerrado}" width="${barW}" height="${Math.max(cerradoH,0)}" rx="3" fill="var(--green)" style="pointer-events:none;"><title>${d.nombre}: ${d.Cantidad} OR por ${fmtMoney(d.ImporteCerrado)}</title></rect>`;
+    svg += `<rect x="${x}" y="${yCerrado}" width="${barW}" height="${Math.max(cerradoH,0)}" rx="3" fill="url(#barGradAnual)" style="pointer-events:none;"><title>${d.nombre}: ${d.Cantidad} OR por ${fmtMoney(d.ImporteCerrado)}</title></rect>`;
     if (d.Cantidad > 0) {
       svg += `<text x="${xCentro}" y="${yCerrado-6}" text-anchor="middle" font-family="monospace" font-size="11" font-weight="700" fill="var(--text)" style="pointer-events:none;">OR ${d.Cantidad}</text>`;
     }
