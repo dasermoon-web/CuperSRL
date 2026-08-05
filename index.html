@@ -413,6 +413,17 @@
 
         <div class="row2">
           <div>
+            <label>Teléfono</label>
+            <input type="text" id="clienteTelefono" placeholder="Ej: 264 456-7890">
+          </div>
+          <div>
+            <label>Kilómetros</label>
+            <input type="text" inputmode="numeric" id="clienteKm" placeholder="Ej: 145.000">
+          </div>
+        </div>
+
+        <div class="row2">
+          <div>
             <label>Vehículo</label>
             <input type="text" id="vehiculo" placeholder="Ej: Toyota Hilux">
           </div>
@@ -2503,6 +2514,8 @@ function cargarOrdenEnForm(orden, d){
   $('fechaCierre').value = (d.fechaCierre && d.fechaCierre !== 'N') ? d.fechaCierre : '';
   $('fechaIng').value = d.fechaIng || '';
   $('razonSocial').value = d.razonSocial || '';
+  $('clienteTelefono').value = d.clienteTelefono || '';
+  $('clienteKm').value = d.clienteKm ? Math.round(d.clienteKm).toLocaleString('es-AR') : '';
   $('vehiculo').value = d.vehiculo || '';
   $('dominio').value = d.dominio || '';
   $('total').value = d.total ? Math.round(d.total).toLocaleString('es-AR') : '';
@@ -2512,7 +2525,9 @@ function cargarOrdenEnForm(orden, d){
   const estadoTxt = estaCerrada ? `cerrada el ${fmtISOaDDMMAA(d.fechaCierre)}` : 'todavía ABIERTA';
   const facturadoTxt = estaFacturada ? 'facturada/conciliada' : 'sin facturar';
   const cobroTxt = fc === 'SI' ? 'cobrada (sin fecha)' : (fc ? `cobrada en ${fc.slice(5,7)}/${fc.slice(2,4)}` : 'sin cobrar');
-  $('buscarHint').innerHTML = `OR ${d.orden || orden} cargada — ${estadoTxt} · ${facturadoTxt} · ${cobroTxt}.<br><span style="color:var(--text-dim); font-size:12px;">Para tocar factura, modo de pago o cobro, usá la pestaña "💰 Cobranza".</span>`;
+  const telTxt = d.clienteTelefono ? d.clienteTelefono : '--';
+  const kmTxt = d.clienteKm ? Math.round(d.clienteKm).toLocaleString('es-AR') + ' km' : '--';
+  $('buscarHint').innerHTML = `OR ${d.orden || orden} cargada — ${estadoTxt} · ${facturadoTxt} · ${cobroTxt}.<br>Tel: ${telTxt} · Km: ${kmTxt}<br><span style="color:var(--text-dim); font-size:12px;">Para tocar factura, modo de pago o cobro, usá la pestaña "💰 Cobranza".</span>`;
   $('btnBorrar').style.display = 'inline-block';
   ocultarResultados();
 }
@@ -2609,6 +2624,14 @@ $('total').addEventListener('blur', () => {
   const n = parseMiles($('total').value);
   $('total').value = n ? n.toLocaleString('es-AR') : '';
 });
+$('clienteKm').addEventListener('focus', () => {
+  const n = parseMiles($('clienteKm').value);
+  $('clienteKm').value = n ? n : '';
+});
+$('clienteKm').addEventListener('blur', () => {
+  const n = parseMiles($('clienteKm').value);
+  $('clienteKm').value = n ? n.toLocaleString('es-AR') : '';
+});
 
 $('form').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -2620,6 +2643,8 @@ $('form').addEventListener('submit', async (e) => {
     fechaCierre: $('fechaCierre').value || 'N',
     fechaIng: $('fechaIng').value || '',
     razonSocial: $('razonSocial').value.trim(),
+    clienteTelefono: $('clienteTelefono').value.trim(),
+    clienteKm: parseMiles($('clienteKm').value),
     vehiculo: $('vehiculo').value.trim(),
     dominio: $('dominio').value.trim(),
     total: parseMiles($('total').value),
