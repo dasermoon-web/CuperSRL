@@ -13,7 +13,6 @@
 <meta name="apple-mobile-web-app-title" content="CuperSRL">
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <style>
@@ -159,6 +158,26 @@
   .deudor-barra-bg{ height:3px; background:var(--panel-2); border-radius:2px; margin-top:6px; overflow:hidden; }
   .deudor-barra-fill{ height:100%; background:linear-gradient(90deg, #ff5c5c, #ff9a6b); }
 
+  .user-card{ background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin-bottom:12px; }
+  .user-card-top{ display:flex; align-items:center; gap:13px; }
+  .user-avatar{
+    width:46px; height:46px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+    font-family:var(--mono); font-weight:800; font-size:17px; background:var(--panel-2); border:2px solid var(--line);
+  }
+  .user-avatar.rol-admin{ color:#ff5c5c; border-color:#ff5c5c; }
+  .user-avatar.rol-editor{ color:#5b9dff; border-color:#5b9dff; }
+  .user-avatar.rol-lectura{ color:var(--text-dim); border-color:var(--line); }
+  .user-name{ font-size:15px; font-weight:700; color:var(--text); }
+  .user-handle{ font-size:12.5px; color:var(--text-dim); font-family:var(--mono); }
+  .role-badge{ display:inline-block; font-size:10.5px; font-weight:700; padding:3px 9px; border-radius:100px; margin-left:6px; vertical-align:middle; }
+  .role-badge.rol-admin{ background:rgba(255,92,92,.16); color:#ff5c5c; }
+  .role-badge.rol-editor{ background:rgba(91,157,255,.16); color:#5b9dff; }
+  .role-badge.rol-lectura{ background:rgba(255,255,255,.08); color:var(--text-dim); }
+  .user-actions{ margin-top:12px; display:flex; gap:8px; flex-wrap:wrap; }
+  .user-actions .btn{ padding:8px 14px; font-size:12px; }
+  .user-edit-wrap{ display:none; margin-top:14px; padding-top:14px; border-top:1px solid var(--line); }
+  .user-sesion-tag{ font-size:11.5px; color:var(--text-dim); font-style:italic; margin-top:4px; }
+
   .torta-wrap{ display:flex; align-items:center; justify-content:center; gap:18px; flex-wrap:wrap; padding:10px 0; }
   .torta-leyenda{ font-size:12px; }
   .torta-leyenda div{ display:flex; align-items:center; gap:8px; margin-bottom:8px; }
@@ -291,6 +310,19 @@
         style="width:100%; background:var(--panel-2); border:1px solid var(--line); color:var(--text); padding:11px 14px; border-radius:6px; font-size:14px; margin-bottom:16px;">
       <button type="submit" class="btn" style="width:100%;">Ingresar</button>
     </form>
+
+    <form id="formPrimerAdmin" style="display:none; text-align:left;">
+      <div style="text-align:center; font-size:13px; color:var(--text-dim); margin-bottom:14px;">Todavía no hay ningún usuario creado. Armá el primero — va a quedar como Administrador.</div>
+      <label>Usuario</label>
+      <input type="text" id="primerAdminUsuario" placeholder="ej: daser" required
+        style="width:100%; background:var(--panel-2); border:1px solid var(--line); color:var(--text); padding:11px 14px; border-radius:6px; font-size:14px; margin-bottom:12px;">
+      <label>Contraseña</label>
+      <input type="password" id="primerAdminPassword" placeholder="mínimo 6 caracteres" required
+        style="width:100%; background:var(--panel-2); border:1px solid var(--line); color:var(--text); padding:11px 14px; border-radius:6px; font-size:14px; margin-bottom:16px;">
+      <button type="submit" class="btn" style="width:100%;">Crear administrador y entrar</button>
+      <div id="primerAdminStatus" class="status" style="margin-top:10px;"></div>
+    </form>
+
     <div id="loginError" style="display:none; margin-top:14px; color:var(--warn); font-family:var(--mono); font-size:12px;"></div>
   </div>
 </div>
@@ -451,26 +483,39 @@
 
   <!-- ================= USUARIOS ================= -->
   <div class="panel-content" id="view-usuarios">
-    <div class="panel">
-      <div class="panel-head"><h2>Crear usuario nuevo</h2></div>
-      <div class="panel-sub">
-        Le das acceso a alguien más al panel. Elegí un nombre de usuario simple (sin espacios) y una contraseña — se la pasás por afuera (WhatsApp, en persona, etc.).
-      </div>
-      <label>Usuario</label>
-      <input type="text" id="nuevoUsuario" placeholder="ej: gerencia, juan, freddy">
-      <label>Contraseña</label>
-      <input type="password" id="nuevoPassword" placeholder="mínimo 6 caracteres">
-      <div class="actions">
-        <button type="button" class="btn" id="btnCrearUsuario">Crear usuario</button>
-      </div>
-      <div class="status" id="usuarioStatus"></div>
+    <div class="panel" id="panelSinPermisoUsuarios" style="display:none;">
+      <div class="panel-head"><h2>Usuarios</h2></div>
+
+      <div class="panel-sub">Esta sección es solo para administradores. Si necesitás acceso, pedile a un admin que te dé el rol desde acá mismo.</div>
     </div>
 
-    <div class="panel">
-      <div class="panel-head"><h2>Sacarle el acceso a alguien</h2></div>
-      <div class="panel-sub">
-        Por seguridad, esto todavía no se puede hacer desde acá — evita que cualquiera que entre a la app pueda borrar el acceso de otro. Se hace en la consola de Firebase: <strong>Authentication → Users</strong>, buscás a la persona, ícono de tres puntos → <strong>"Disable account"</strong> (o borrarla directamente). Es cuestión de 2 clics.
+    <div id="panelGestionUsuarios" style="display:none;">
+      <div class="panel">
+        <div class="panel-head" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <h2>Gestión de usuarios</h2>
+          <button type="button" class="btn" id="btnMostrarNuevoUsuario">+ Nuevo usuario</button>
+        </div>
+        <div id="formNuevoUsuarioWrap" style="display:none; margin-top:14px; padding-top:14px; border-top:1px solid var(--line);">
+          <label>Usuario</label>
+          <input type="text" id="nuevoUsuario" placeholder="ej: gerencia, juan, freddy">
+          <label>Contraseña</label>
+          <input type="password" id="nuevoPassword" placeholder="mínimo 6 caracteres">
+          <label>Rol</label>
+          <select id="nuevoRol">
+            <option value="admin">Admin — acceso total, incluida la gestión de usuarios</option>
+            <option value="editor" selected>Editor — puede cargar y modificar datos</option>
+            <option value="lectura">Solo Lectura — solo puede ver, no puede guardar cambios</option>
+          </select>
+          <div class="actions">
+            <button type="button" class="btn" id="btnCrearUsuario">Crear usuario</button>
+            <button type="button" class="btn secondary" id="btnCancelarNuevoUsuario">Cancelar</button>
+          </div>
+          <div class="status" id="usuarioStatus"></div>
+        </div>
       </div>
+
+      <div id="listaUsuarios"></div>
+      <div class="status" id="listaUsuariosStatus" style="margin-top:8px;"></div>
     </div>
   </div>
 
@@ -1959,103 +2004,377 @@ async function cargarDatos(forzar){
 document.getElementById('reloadBtn').addEventListener('click', () => cargarDatos(true));
 
 // ============== LOGIN / SESIÓN ==============
+// Sistema propio (usuario/contraseña guardados en la colección "usuarios" de Firestore),
+// SIN Firebase Authentication. Elegido a conciencia para no depender del plan pago Blaze.
+// OJO: esto implica que las reglas de Firestore deben quedar abiertas (sin exigir
+// request.auth, porque acá nunca hay un login real de Firebase).
 const loginScreen = document.getElementById('loginScreen');
 const appWrap = document.getElementById('appWrap');
 const loginError = document.getElementById('loginError');
 
+let sesionActual = null; // { uid, usuario, nombre, rol }
+let timerInactividad = null;
+const MINUTOS_INACTIVIDAD = 30;
+
+function guardarSesion(s){
+  sesionActual = s;
+  sessionStorage.setItem('cuperSesion', JSON.stringify(s));
+}
+function borrarSesionGuardada(){
+  sessionStorage.removeItem('cuperSesion');
+}
+function leerSesionGuardada(){
+  try { return JSON.parse(sessionStorage.getItem('cuperSesion')); } catch(e){ return null; }
+}
+
+function mostrarApp(){
+  loginScreen.style.display = 'none';
+  appWrap.style.display = 'block';
+  document.getElementById('loginPassword').value = '';
+  miRolUsuario = sesionActual.rol;
+  cargarDatos();
+  aplicarRestriccionesUI();
+  reiniciarTimerInactividad();
+}
+function mostrarLoginNormal(){
+  document.getElementById('formPrimerAdmin').style.display = 'none';
+  document.getElementById('loginForm').style.display = 'block';
+  loginScreen.style.display = 'flex';
+  appWrap.style.display = 'none';
+  detenerTimerInactividad();
+}
+function mostrarFormPrimerAdmin(){
+  document.getElementById('formPrimerAdmin').style.display = 'block';
+  document.getElementById('loginForm').style.display = 'none';
+  loginScreen.style.display = 'flex';
+  appWrap.style.display = 'none';
+}
+
+function reiniciarTimerInactividad(){
+  clearTimeout(timerInactividad);
+  timerInactividad = setTimeout(() => {
+    borrarSesionGuardada();
+    sesionActual = null;
+    mostrarLoginNormal();
+    loginError.textContent = 'Se cerró la sesión por 30 minutos de inactividad.';
+    loginError.style.display = 'block';
+  }, MINUTOS_INACTIVIDAD * 60 * 1000);
+}
+function detenerTimerInactividad(){ clearTimeout(timerInactividad); }
+['click','keydown','scroll','touchstart'].forEach(ev => {
+  document.addEventListener(ev, () => { if (sesionActual) reiniciarTimerInactividad(); });
+});
+
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const usuarioIngresado = document.getElementById('loginEmail').value.trim().toLowerCase();
-  const email = usuarioIngresado.includes('@') ? usuarioIngresado : usuarioIngresado + '@cupersrl.local';
   const pass = document.getElementById('loginPassword').value;
   loginError.style.display = 'none';
   try {
-    await firebase.auth().signInWithEmailAndPassword(email, pass);
-    // onAuthStateChanged se encarga de mostrar la app
-  } catch (err) {
-    let msg = 'No se pudo iniciar sesión.';
-    if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
-      msg = 'Usuario o contraseña incorrectos.';
-    } else if (err.code === 'auth/too-many-requests') {
-      msg = 'Demasiados intentos. Probá de nuevo en unos minutos.';
+    const snap = await db.collection('usuarios').where('usuario', '==', usuarioIngresado).limit(1).get();
+    if (snap.empty || snap.docs[0].data().password !== pass) {
+      loginError.textContent = 'Usuario o contraseña incorrectos.';
+      loginError.style.display = 'block';
+      return;
     }
-    loginError.textContent = msg;
+    const doc = snap.docs[0];
+    const d = doc.data();
+    guardarSesion({ uid: doc.id, usuario: d.usuario, nombre: d.nombre || d.usuario, rol: d.rol || 'lectura' });
+    mostrarApp();
+  } catch (err) {
+    loginError.textContent = 'Error al conectar: ' + err.message;
     loginError.style.display = 'block';
   }
 });
 
 document.getElementById('logoutBtn').addEventListener('click', () => {
-  firebase.auth().signOut();
+  borrarSesionGuardada();
+  sesionActual = null;
+  mostrarLoginNormal();
 });
 
-// Pide usuario y contraseña siempre que se abre la app (no queda la sesión guardada)
-firebase.auth().setPersistence(firebase.auth.Auth.Persistence.NONE)
-  .then(() => firebase.auth().signOut())
-  .catch(() => {});
-
-firebase.auth().onAuthStateChanged((user) => {
-  if (user) {
-    loginScreen.style.display = 'none';
-    appWrap.style.display = 'block';
-    document.getElementById('loginPassword').value = '';
-    cargarDatos();
-  } else {
-    loginScreen.style.display = 'flex';
-    appWrap.style.display = 'none';
+document.getElementById('formPrimerAdmin').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const statusEl = document.getElementById('primerAdminStatus');
+  const usuario = document.getElementById('primerAdminUsuario').value.trim().toLowerCase();
+  const pass = document.getElementById('primerAdminPassword').value;
+  statusEl.className = 'status'; statusEl.textContent = '';
+  if (!usuario || /\s/.test(usuario)) {
+    statusEl.textContent = 'Usuario inválido (sin espacios).';
+    statusEl.className = 'status err';
+    return;
   }
-});
-
-// ============== CREAR USUARIOS (sin perder la sesión propia) ==============
-// Usamos una segunda instancia de Firebase solo para esto: crear un usuario
-// nuevo inicia sesión automáticamente como ese usuario en Firebase, así que
-// lo hacemos en una app "invisible" aparte para no desloguearnos nosotros.
-let secondaryApp = null;
-function getSecondaryApp(){
-  if (!secondaryApp) {
-    try {
-      secondaryApp = firebase.initializeApp(firebaseConfig, 'SecundariaParaCrearUsuarios');
-    } catch (e) {
-      secondaryApp = firebase.app('SecundariaParaCrearUsuarios');
+  if (!pass || pass.length < 6) {
+    statusEl.textContent = 'La contraseña necesita al menos 6 caracteres.';
+    statusEl.className = 'status err';
+    return;
+  }
+  try {
+    const yaHay = await db.collection('usuarios').limit(1).get();
+    if (!yaHay.empty) {
+      statusEl.textContent = 'Ya hay usuarios creados — pedile el acceso a un administrador.';
+      statusEl.className = 'status err';
+      return;
     }
+    const ref = await db.collection('usuarios').add({
+      usuario, password: pass, nombre: usuario, rol: 'admin',
+      creadoEl: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    guardarSesion({ uid: ref.id, usuario, nombre: usuario, rol: 'admin' });
+    mostrarApp();
+  } catch (err) {
+    statusEl.textContent = 'Error: ' + err.message;
+    statusEl.className = 'status err';
   }
-  return secondaryApp;
+});
+
+// Al abrir la página: si hay sesión guardada (dura hasta cerrar la pestaña) la retoma;
+// si no hay ningún usuario creado todavía, ofrece armar el primer admin; si no, login normal.
+(async function iniciarPantalla(){
+  const previa = leerSesionGuardada();
+  if (previa) {
+    sesionActual = previa;
+    mostrarApp();
+    return;
+  }
+  try {
+    const snap = await db.collection('usuarios').limit(1).get();
+    if (snap.empty) mostrarFormPrimerAdmin();
+    else mostrarLoginNormal();
+  } catch (err) {
+    mostrarLoginNormal();
+  }
+})();
+
+// ============== GESTIÓN DE USUARIOS (directo a Firestore, sin Cloud Functions) ==============
+const ROL_LABEL = { admin: 'Admin', editor: 'Editor', lectura: 'Solo Lectura' };
+let miRolUsuario = null; // 'admin' | 'editor' | 'lectura'
+
+function mensajeErrorUsuarios(err, fallback){
+  return (err && err.message) ? err.message : fallback;
+}
+
+// Se puede escribir (guardar/borrar/cargar) si es admin o editor. 'lectura' no puede.
+function puedeEscribir(){
+  return miRolUsuario === 'admin' || miRolUsuario === 'editor';
+}
+
+// Llamar SIEMPRE al arranque de cualquier acción que escriba datos (guardar OR, borrar,
+// cargar PDF, guardar en Cobranza). Si no tiene permiso, avisa y corta la acción.
+function bloquearSiSoloLectura(){
+  if (puedeEscribir()) return false;
+  alert('Tu usuario es de Solo Lectura — no podés guardar, cargar ni borrar datos. Pedile a un administrador que te cambie el rol si necesitás editar.');
+  return true;
+}
+
+// Deshabilita visualmente los botones de escritura si el usuario es de Solo Lectura.
+function aplicarRestriccionesUI(){
+  const soloLectura = !puedeEscribir();
+  const idsBotonesEscritura = ['btnGuardar', 'btnBorrar', 'btnCrearUsuario'];
+  idsBotonesEscritura.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.title = soloLectura ? 'Tu usuario es de Solo Lectura' : '';
+  });
+  let banner = document.getElementById('bannerSoloLectura');
+  if (soloLectura) {
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'bannerSoloLectura';
+      banner.style.cssText = 'background:rgba(240,185,79,.12); border:1px solid rgba(240,185,79,.4); color:#f0b94f; font-family:var(--mono); font-size:12px; padding:9px 14px; border-radius:8px; margin-bottom:16px;';
+      banner.textContent = '👁 Estás viendo esta app en modo Solo Lectura — podés navegar y consultar, pero no guardar cambios.';
+      document.querySelector('.main-content').prepend(banner);
+    }
+  } else if (banner) {
+    banner.remove();
+  }
+}
+
+// Decide qué panel mostrar dentro de Usuarios: sin permiso, o gestión completa (el alta del
+// primer admin ya se resuelve antes, en la pantalla de login).
+async function prepararPanelUsuarios(){
+  const panelSinPermiso = document.getElementById('panelSinPermisoUsuarios');
+  const panelGestion = document.getElementById('panelGestionUsuarios');
+  panelSinPermiso.style.display = 'none';
+  panelGestion.style.display = 'none';
+
+  if (miRolUsuario !== 'admin') {
+    panelSinPermiso.style.display = 'block';
+    return;
+  }
+  panelGestion.style.display = 'block';
+  cargarListadoUsuarios();
+}
+
+document.getElementById('btnMostrarNuevoUsuario').addEventListener('click', () => {
+  const wrap = document.getElementById('formNuevoUsuarioWrap');
+  wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none';
+});
+document.getElementById('btnCancelarNuevoUsuario').addEventListener('click', () => {
+  document.getElementById('formNuevoUsuarioWrap').style.display = 'none';
+  document.getElementById('nuevoUsuario').value = '';
+  document.getElementById('nuevoPassword').value = '';
+  document.getElementById('usuarioStatus').className = 'status';
+  document.getElementById('usuarioStatus').textContent = '';
+});
+
+function avatarLetra(nombre){ return (nombre || '?').trim().charAt(0).toUpperCase(); }
+
+async function cargarListadoUsuarios(){
+  const cont = document.getElementById('listaUsuarios');
+  const statusEl = document.getElementById('listaUsuariosStatus');
+  statusEl.className = 'status';
+  statusEl.textContent = '';
+  try {
+    const snap = await db.collection('usuarios').orderBy('usuario').get();
+    const miUid = sesionActual.uid;
+
+    cont.innerHTML = snap.docs.map(doc => {
+      const u = doc.data();
+      const uid = doc.id;
+      const esYo = uid === miUid;
+      const rol = u.rol || 'lectura';
+      const nombreVisible = u.nombre || u.usuario || '(sin nombre)';
+      return `
+        <div class="user-card" data-uid="${uid}">
+          <div class="user-card-top">
+            <div class="user-avatar rol-${rol}">${avatarLetra(nombreVisible)}</div>
+            <div>
+              <div><span class="user-name">${nombreVisible}</span><span class="role-badge rol-${rol}">${ROL_LABEL[rol] || rol}</span></div>
+              <div class="user-handle">@${u.usuario || ''}</div>
+              ${esYo ? '<div class="user-sesion-tag">(sesión actual)</div>' : ''}
+            </div>
+          </div>
+          <div class="user-actions">
+            <button type="button" class="btn secondary btnEditarUsuario" style="padding:8px 14px; font-size:12px;">Editar</button>
+            ${esYo ? '' : `<button type="button" class="btn btnEliminarUsuario" style="padding:8px 14px; font-size:12px; background:var(--warn); color:#fff;">Eliminar</button>`}
+          </div>
+          <div class="user-edit-wrap">
+            <label>Nombre para mostrar</label>
+            <input type="text" class="inpEditNombre" value="${nombreVisible}" placeholder="Nombre visible">
+            <label>Rol</label>
+            <select class="selEditRol" ${esYo ? 'disabled title="No podés cambiarte el rol a vos mismo"' : ''}>
+              <option value="admin" ${rol==='admin'?'selected':''}>Admin</option>
+              <option value="editor" ${rol==='editor'?'selected':''}>Editor</option>
+              <option value="lectura" ${rol==='lectura'?'selected':''}>Solo Lectura</option>
+            </select>
+            <label>Nueva contraseña (opcional)</label>
+            <input type="password" class="inpEditPassword" placeholder="Dejar vacío para no cambiarla">
+            <div class="actions">
+              <button type="button" class="btn btnGuardarEdicionUsuario" style="padding:8px 14px; font-size:12px;">Guardar cambios</button>
+              <button type="button" class="btn secondary btnCancelarEdicionUsuario" style="padding:8px 14px; font-size:12px;">Cancelar</button>
+            </div>
+            <div class="status editUsuarioStatus"></div>
+          </div>
+        </div>`;
+    }).join('');
+
+    cont.querySelectorAll('.user-card').forEach(card => {
+      const uid = card.dataset.uid;
+      const nombreActual = card.querySelector('.user-name').textContent;
+      const editWrap = card.querySelector('.user-edit-wrap');
+
+      card.querySelector('.btnEditarUsuario').addEventListener('click', () => {
+        editWrap.style.display = editWrap.style.display === 'none' ? 'block' : 'none';
+      });
+      card.querySelector('.btnCancelarEdicionUsuario').addEventListener('click', () => {
+        editWrap.style.display = 'none';
+      });
+
+      card.querySelector('.btnGuardarEdicionUsuario').addEventListener('click', async () => {
+        const statusEdit = card.querySelector('.editUsuarioStatus');
+        const nuevoNombre = card.querySelector('.inpEditNombre').value.trim();
+        const nuevoRol = card.querySelector('.selEditRol').value;
+        const nuevaPass = card.querySelector('.inpEditPassword').value;
+        statusEdit.className = 'status';
+        try {
+          if (nuevaPass && nuevaPass.length < 6) {
+            throw new Error('La nueva contraseña debe tener al menos 6 caracteres.');
+          }
+          const cambios = { rol: nuevoRol };
+          if (nuevoNombre) cambios.nombre = nuevoNombre;
+          if (nuevaPass) cambios.password = nuevaPass;
+          await db.collection('usuarios').doc(uid).update(cambios);
+
+          // Si el que se edita es quien está logueado ahora, actualizamos también la sesión activa.
+          if (uid === sesionActual.uid) {
+            guardarSesion({ ...sesionActual, nombre: cambios.nombre || sesionActual.nombre, rol: nuevoRol });
+            miRolUsuario = nuevoRol;
+            aplicarRestriccionesUI();
+          }
+
+          statusEdit.textContent = '✔ Cambios guardados.';
+          statusEdit.className = 'status ok';
+          setTimeout(cargarListadoUsuarios, 600);
+        } catch (err) {
+          statusEdit.textContent = mensajeErrorUsuarios(err, 'No se pudieron guardar los cambios.');
+          statusEdit.className = 'status err';
+        }
+      });
+
+      const btnEliminar = card.querySelector('.btnEliminarUsuario');
+      if (btnEliminar) {
+        btnEliminar.addEventListener('click', async () => {
+          if (!confirm(`¿Borrar definitivamente a "${nombreActual}"? No se puede deshacer.`)) return;
+          try {
+            await db.collection('usuarios').doc(uid).delete();
+            cargarListadoUsuarios();
+          } catch (err) {
+            statusEl.textContent = mensajeErrorUsuarios(err, 'No se pudo borrar el usuario.');
+            statusEl.className = 'status err';
+          }
+        });
+      }
+    });
+  } catch (err) {
+    statusEl.textContent = 'No se pudo cargar el listado: ' + mensajeErrorUsuarios(err, err.message);
+    statusEl.className = 'status err';
+  }
 }
 
 document.getElementById('btnCrearUsuario').addEventListener('click', async () => {
   const statusEl = document.getElementById('usuarioStatus');
   const usuarioIngresado = document.getElementById('nuevoUsuario').value.trim().toLowerCase();
   const pass = document.getElementById('nuevoPassword').value;
+  const rol = document.getElementById('nuevoRol').value;
 
   statusEl.className = 'status';
-  if (!usuarioIngresado || !pass) {
-    statusEl.textContent = 'Completá usuario y contraseña.';
+  if (!usuarioIngresado || /\s/.test(usuarioIngresado)) {
+    statusEl.textContent = 'Usuario inválido (sin espacios).';
     statusEl.className = 'status err';
     return;
   }
-  if (pass.length < 6) {
+  if (!pass || pass.length < 6) {
     statusEl.textContent = 'La contraseña necesita al menos 6 caracteres.';
     statusEl.className = 'status err';
     return;
   }
 
-  const email = usuarioIngresado.includes('@') ? usuarioIngresado : usuarioIngresado + '@cupersrl.local';
-  const app2 = getSecondaryApp();
-
+  const btn = document.getElementById('btnCrearUsuario');
+  btn.disabled = true;
   try {
-    await app2.auth().createUserWithEmailAndPassword(email, pass);
-    await app2.auth().signOut();
-    statusEl.textContent = `✔ Usuario "${usuarioIngresado}" creado. Ya puede entrar con esa contraseña.`;
+    const existe = await db.collection('usuarios').where('usuario', '==', usuarioIngresado).limit(1).get();
+    if (!existe.empty) {
+      throw new Error('Ese usuario ya existe.');
+    }
+    await db.collection('usuarios').add({
+      usuario: usuarioIngresado, password: pass, nombre: usuarioIngresado, rol,
+      creadoEl: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    statusEl.textContent = `✔ Usuario "${usuarioIngresado}" creado con rol ${ROL_LABEL[rol]}.`;
     statusEl.className = 'status ok';
     document.getElementById('nuevoUsuario').value = '';
     document.getElementById('nuevoPassword').value = '';
+    cargarListadoUsuarios();
   } catch (err) {
-    let msg = 'No se pudo crear el usuario.';
-    if (err.code === 'auth/email-already-in-use') msg = 'Ese usuario ya existe.';
-    else if (err.code === 'auth/weak-password') msg = 'Contraseña muy débil (mínimo 6 caracteres).';
-    statusEl.textContent = msg;
+    statusEl.textContent = mensajeErrorUsuarios(err, 'No se pudo crear el usuario.');
     statusEl.className = 'status err';
   }
+  btn.disabled = false;
 });
+
+document.querySelector('.tab-btn[data-tab="usuarios"]').addEventListener('click', prepararPanelUsuarios);
+
+
 
 
 // ============== CARGAR DESDE PDF ==============
@@ -2323,6 +2642,7 @@ pdfDropZone.addEventListener('drop', (e) => {
 });
 
 document.getElementById('btnProcesarPDF').addEventListener('click', async () => {
+  if (bloquearSiSoloLectura()) return;
   const log = document.getElementById('pdfLog');
   log.innerHTML = '';
   const file = pdfArchivoSeleccionado;
@@ -2635,6 +2955,7 @@ $('clienteKm').addEventListener('blur', () => {
 
 $('form').addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (bloquearSiSoloLectura()) return;
   const orden = $('orden').value.trim();
   if (!orden) return;
 
@@ -2665,6 +2986,7 @@ $('form').addEventListener('submit', async (e) => {
 });
 
 $('btnBorrar').addEventListener('click', async () => {
+  if (bloquearSiSoloLectura()) return;
   const orden = $('orden').value.trim();
   if (!orden) return;
   const confirmacion = prompt(`Esto borra la OR "${orden}" para siempre, no se puede deshacer.\n\nEscribí el número de Orden para confirmar:`);
@@ -2991,6 +3313,7 @@ $('cobBuscarFactura').addEventListener('focus', () => {
 
 $('cobForm').addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (bloquearSiSoloLectura()) return;
   if (!cobOrdenActual) return;
 
   const montoCobrado = Math.max(0, Math.min(parseMiles($('cobMontoCobrado').value), cobOrdenTotal));
