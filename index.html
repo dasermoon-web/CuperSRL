@@ -356,8 +356,8 @@
       <div id="graficoInicioScroll" style="overflow-x:auto;"></div>
       <div style="display:flex; gap:18px; flex-wrap:wrap; margin-top:10px; font-family:var(--mono); font-size:11px; color:var(--text-dim);">
         <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:var(--green); margin-right:5px;"></span>Cerrado</span>
-        <span><span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#2563ff; margin-right:5px;"></span>Facturado + Conciliado</span>
-        <span><span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#000000; border:1.5px solid #e8e8e8; margin-right:5px;"></span>Cobrado</span>
+        <span><span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#2563ff; margin-right:5px;"></span>Facturado</span>
+        <span><span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#000000; border:1.5px solid #e8e8e8; margin-right:5px;"></span>Cobrado (por factura o conciliado)</span>
       </div>
     </div>
   </div>
@@ -896,11 +896,11 @@ function procesarDatos(docs){
     // --- OR Cerradas / OR Cobradas (col. A = fecha de cierre, col. AG = facturaImpaga) ---
     if (rec.fechaCierre && rec.fechaCierre !== 'N') {
       const mesCierre = rec.fechaCierre.slice(0,7);
-      if (!cierresMap[mesCierre]) cierresMap[mesCierre] = { Mes: mesCierre, CantidadCerradas: 0, ImporteCerrado: 0, ImporteCobrado: 0, ImporteFacturadoConciliado: 0 };
+      if (!cierresMap[mesCierre]) cierresMap[mesCierre] = { Mes: mesCierre, CantidadCerradas: 0, ImporteCerrado: 0, ImporteCobrado: 0, ImporteFacturado: 0 };
       cierresMap[mesCierre].CantidadCerradas += 1;
       cierresMap[mesCierre].ImporteCerrado += (rec.total || 0);
-      if (categoria(rec) !== 'SinClasificar') cierresMap[mesCierre].ImporteFacturadoConciliado += (rec.total || 0); // facturada o conciliada, sin importar si ya se cobró
-      if (rec.fechaCobro && getSaldoPendiente(rec) <= 0) cierresMap[mesCierre].ImporteCobrado += (rec.total || 0); // cobrada = saldo en $0
+      if (categoria(rec) === 'Facturado') cierresMap[mesCierre].ImporteFacturado += (rec.total || 0); // solo facturada (con N° de factura), no conciliada
+      if (rec.fechaCobro && getSaldoPendiente(rec) <= 0) cierresMap[mesCierre].ImporteCobrado += (rec.total || 0); // cobrada = saldo en $0, ya sea por factura o conciliado
     }
 
     // --- Facturas cobradas por mes (para la tendencia de "Fac. Cobradas") ---
@@ -991,7 +991,7 @@ function renderGraficoInicio(){
       nombre, mesKey,
       Cantidad: encontrado ? encontrado.CantidadCerradas : 0,
       Cerrado: encontrado ? encontrado.ImporteCerrado : 0,
-      FacturadoConciliado: encontrado ? encontrado.ImporteFacturadoConciliado : 0,
+      Facturado: encontrado ? encontrado.ImporteFacturado : 0,
       Cobrado: encontrado ? encontrado.ImporteCobrado : 0,
     };
   });
@@ -1004,7 +1004,7 @@ function renderGraficoInicio(){
   const step = plotW / cantMeses;
   const barW = Math.min(56, step * 0.4);
 
-  const maxVal = Math.max(1, ...datosPorMes.map(d => Math.max(d.Cerrado, d.FacturadoConciliado, d.Cobrado)));
+  const maxVal = Math.max(1, ...datosPorMes.map(d => Math.max(d.Cerrado, d.Facturado, d.Cobrado)));
   const magnitude = Math.pow(10, Math.floor(Math.log10(maxVal)));
   const niceMax = Math.ceil(maxVal / (magnitude/2)) * (magnitude/2);
   const yScale = (v) => plotH - Math.min(v, niceMax) / niceMax * plotH;
@@ -1036,8 +1036,7 @@ function renderGraficoInicio(){
     svg += `<text x="${xCentro}" y="${yNombreMes}" text-anchor="middle" font-family="monospace" font-size="10" fill="var(--text-dim)" style="pointer-events:none;">${d.nombre}</text>`;
   });
 
-  // Línea blanca: Facturado + Conciliado (etiqueta siempre arriba del punto)
-  // Línea Facturado+Conciliado (etiqueta siempre arriba) y Cobrado (etiqueta siempre debajo)
+  // Línea Facturado (solo con N° de factura) y línea Cobrado (facturado o conciliado, ya pagado)
   const lineaSerie = (campo, color, colorTexto, offsetTextoY, valorAncla, contornoClaro) => {
     const puntos = datosPorMes.map((d, i) => `${centros[i]},${padTop + yScale(d[campo])}`);
     let s = '';
@@ -1050,12 +1049,12 @@ function renderGraficoInicio(){
       const y = padTop + yScale(d[campo]);
       const strokePunto = contornoClaro ? '#e8e8e8' : 'var(--bg)';
       s += `<circle cx="${centros[i]}" cy="${y}" r="5" fill="${color}" stroke="${strokePunto}" stroke-width="1.5"><title>${valorAncla}: ${d.nombre} ${fmtMoney(d[campo])}</title></circle>`;
-      s += `<text x="${centros[i]}" y="${y+offsetTextoY}" text-anchor="middle" font-family="monospace" font-size="11" font-weight="700" fill="${colorTexto}" style="pointer-events:none;">${fmtMoneyShort(d[campo])}</text>`;
+      s += `<text x="${centros[i]}" y="${y+offsetTextoY}" text-anchor="middle" font-family="monospace" font-size="11" font-weight="700" fill="${colorTexto}" stroke="#000" stroke-width="3" paint-order="stroke fill" stroke-linejoin="round" style="pointer-events:none;">${fmtMoneyShort(d[campo])}</text>`;
     });
     return s;
   };
-  svg += lineaSerie('FacturadoConciliado', '#2563ff', '#5b8dff', -12, 'Facturado + Conciliado', false);
-  svg += lineaSerie('Cobrado', '#000000', '#e8e8e8', 20, 'Cobrado', true);
+  svg += lineaSerie('Facturado', '#2563ff', '#5b8dff', -12, 'Facturado', false);
+  svg += lineaSerie('Cobrado', '#000000', '#e8e8e8', 20, 'Cobrado (factura o conciliado)', true);
 
 
   svg += `</svg>`;
