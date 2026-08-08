@@ -1066,7 +1066,7 @@ function renderGraficoInicio(){
   contenedor.querySelectorAll('rect[data-mes]').forEach(rect => {
     rect.addEventListener('click', () => {
       document.querySelector('.tab-btn[data-tab="carga"]').click();
-      mostrarOrdenesDelMes(rect.dataset.mes, rect.dataset.label);
+      setTimeout(() => mostrarOrdenesDelMes(rect.dataset.mes, rect.dataset.label), 50);
     });
   });
 }
@@ -1231,7 +1231,7 @@ function renderAlertaMoraInicio(){
   el.innerHTML = html;
   el.querySelectorAll('.btnVerMora').forEach(b => b.addEventListener('click', () => {
     document.querySelector('.tab-btn[data-tab="cobranza"]').click();
-    mostrarDetalleKPI('facturasImpagas', 'red');
+    setTimeout(() => mostrarDetalleKPI('facturasImpagas', 'red'), 50);
   }));
 }
 
