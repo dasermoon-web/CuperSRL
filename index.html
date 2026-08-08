@@ -2015,6 +2015,9 @@ async function cargarDatos(forzar){
 }
 document.getElementById('reloadBtn').addEventListener('click', () => cargarDatos(true));
 
+const ROL_LABEL = { admin: 'Admin', editor: 'Editor', lectura: 'Solo Lectura' };
+let miRolUsuario = null; // 'admin' | 'editor' | 'lectura'
+
 // ============== LOGIN / SESIÓN ==============
 // Sistema propio (usuario/contraseña guardados en la colección "usuarios" de Firestore),
 // SIN Firebase Authentication. Elegido a conciencia para no depender del plan pago Blaze
@@ -2158,8 +2161,6 @@ document.getElementById('formPrimerAdmin').addEventListener('submit', async (e) 
 })();
 
 // ============== GESTIÓN DE USUARIOS (directo a Firestore, sin Cloud Functions) ==============
-const ROL_LABEL = { admin: 'Admin', editor: 'Editor', lectura: 'Solo Lectura' };
-let miRolUsuario = null; // 'admin' | 'editor' | 'lectura'
 
 function mensajeErrorUsuarios(err, fallback){
   return (err && err.message) ? err.message : fallback;
