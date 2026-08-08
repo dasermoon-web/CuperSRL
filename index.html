@@ -1066,7 +1066,10 @@ function renderGraficoInicio(){
   contenedor.querySelectorAll('rect[data-mes]').forEach(rect => {
     rect.addEventListener('click', () => {
       document.querySelector('.tab-btn[data-tab="carga"]').click();
-      setTimeout(() => mostrarOrdenesDelMes(rect.dataset.mes, rect.dataset.label), 50);
+      setTimeout(() => {
+        if (kpiActivo !== 'detalleMensual') mostrarDetalleKPI('detalleMensual', 'orange'); // abre el panel "Detalle general" si estaba cerrado
+        setTimeout(() => mostrarOrdenesDelMes(rect.dataset.mes, rect.dataset.label), 50); // recién ahí abre el detalle del mes puntual, adentro
+      }, 50);
     });
   });
 }
@@ -2145,12 +2148,7 @@ document.getElementById('formPrimerAdmin').addEventListener('submit', async (e) 
 // Al abrir la página: si hay sesión guardada (dura hasta cerrar la pestaña) la retoma;
 // si no hay ningún usuario creado todavía, ofrece armar el primer admin; si no, login normal.
 (async function iniciarPantalla(){
-  const previa = leerSesionGuardada();
-  if (previa) {
-    sesionActual = previa;
-    mostrarApp();
-    return;
-  }
+  borrarSesionGuardada(); // siempre pide usuario y contraseña de nuevo, incluso al refrescar
   try {
     const snap = await db.collection('usuarios').limit(1).get();
     if (snap.empty) mostrarFormPrimerAdmin();
