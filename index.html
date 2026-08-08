@@ -362,7 +362,7 @@
     <div id="alertaMoraInicio"></div>
     <div class="panel" id="panelGraficoInicio">
       <div class="panel-head"><h2 id="graficoInicioTitulo">Año actual — OR cerradas, facturadas/conciliadas y cobradas</h2></div>
-      <div class="panel-sub">Valores de OR cerradas por mes con diferencias entre lo cobrado por factura y conciliado.</div>
+      <div class="panel-sub">De las OR cerradas cada mes: cuántas ya están facturadas y cuántas ya están cobradas (a hoy) — no es lo mismo que "facturado en el mes" de la pestaña Facturación.</div>
       <div id="graficoInicioScroll" style="overflow-x:auto;"></div>
       <div style="display:flex; gap:18px; flex-wrap:wrap; margin-top:10px; font-family:var(--mono); font-size:11px; color:var(--text-dim);">
         <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:var(--green); margin-right:5px;"></span>Cerrado</span>
@@ -896,14 +896,15 @@ function procesarDatos(docs){
   facturasImpagas = docs.filter(rec => rec.facNro && rec.facNro !== '' && rec.total && getSaldoPendiente(rec) > 0);
 
   docs.forEach(rec => {
-    // --- OR Cerradas / OR Cobradas (col. A = fecha de cierre, col. AG = facturaImpaga) ---
+    // --- OR Cerradas por mes (col. A = fecha de cierre), y de esa cohorte: cuánto ya está
+    // facturado y cuánto ya está cobrado A HOY (sin importar cuándo se facturó/cobró en sí) ---
     if (rec.fechaCierre && rec.fechaCierre !== 'N') {
       const mesCierre = rec.fechaCierre.slice(0,7);
       if (!cierresMap[mesCierre]) cierresMap[mesCierre] = { Mes: mesCierre, CantidadCerradas: 0, ImporteCerrado: 0, ImporteCobrado: 0, ImporteFacturado: 0 };
       cierresMap[mesCierre].CantidadCerradas += 1;
       cierresMap[mesCierre].ImporteCerrado += (rec.total || 0);
-      if (categoria(rec) === 'Facturado') cierresMap[mesCierre].ImporteFacturado += (rec.total || 0); // solo facturada (con N° de factura), no conciliada
-      if (rec.fechaCobro && getSaldoPendiente(rec) <= 0) cierresMap[mesCierre].ImporteCobrado += (rec.total || 0); // cobrada = saldo en $0, ya sea por factura o conciliado
+      if (categoria(rec) === 'Facturado') cierresMap[mesCierre].ImporteFacturado += (rec.total || 0); // de las cerradas ese mes, cuántas ya tienen N° de factura
+      if (rec.fechaCobro && getSaldoPendiente(rec) <= 0) cierresMap[mesCierre].ImporteCobrado += (rec.total || 0); // de las cerradas ese mes, cuánto ya se cobró (factura o conciliado)
     }
 
     // --- Facturas cobradas por mes (para la tendencia de "Fac. Cobradas") ---
@@ -988,14 +989,14 @@ function renderGraficoInicio(){
 
   const NOMBRES_MES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   const datosPorMes = clavesAnio.map(mesKey => {
-    const encontrado = monthlyCierres.find(r => r.Mes === mesKey);
+    const encontradoCierre = monthlyCierres.find(r => r.Mes === mesKey);
     const nombre = NOMBRES_MES[parseInt(mesKey.slice(5,7), 10) - 1] + ' ' + mesKey.slice(2,4);
     return {
       nombre, mesKey,
-      Cantidad: encontrado ? encontrado.CantidadCerradas : 0,
-      Cerrado: encontrado ? encontrado.ImporteCerrado : 0,
-      Facturado: encontrado ? encontrado.ImporteFacturado : 0,
-      Cobrado: encontrado ? encontrado.ImporteCobrado : 0,
+      Cantidad: encontradoCierre ? encontradoCierre.CantidadCerradas : 0,
+      Cerrado: encontradoCierre ? encontradoCierre.ImporteCerrado : 0,
+      Facturado: encontradoCierre ? encontradoCierre.ImporteFacturado : 0, // de las cerradas ese mes, cuánto ya está facturado (a hoy)
+      Cobrado: encontradoCierre ? encontradoCierre.ImporteCobrado : 0, // de las cerradas ese mes, cuánto ya está cobrado (a hoy)
     };
   });
 
