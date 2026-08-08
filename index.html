@@ -13,8 +13,6 @@
 <meta name="apple-mobile-web-app-title" content="CuperSRL">
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <style>
@@ -313,6 +311,18 @@
       <button type="submit" class="btn" style="width:100%;">Ingresar</button>
     </form>
 
+    <form id="formPrimerAdmin" style="display:none; text-align:left;">
+      <div style="text-align:center; font-size:13px; color:var(--text-dim); margin-bottom:14px;">Todavía no hay ningún usuario creado. Armá el primero — va a quedar como Administrador.</div>
+      <label>Usuario</label>
+      <input type="text" id="primerAdminUsuario" placeholder="ej: daser" required
+        style="width:100%; background:var(--panel-2); border:1px solid var(--line); color:var(--text); padding:11px 14px; border-radius:6px; font-size:14px; margin-bottom:12px;">
+      <label>Contraseña</label>
+      <input type="password" id="primerAdminPassword" placeholder="mínimo 6 caracteres" required
+        style="width:100%; background:var(--panel-2); border:1px solid var(--line); color:var(--text); padding:11px 14px; border-radius:6px; font-size:14px; margin-bottom:16px;">
+      <button type="submit" class="btn" style="width:100%;">Crear administrador y entrar</button>
+      <div id="primerAdminStatus" class="status" style="margin-top:10px;"></div>
+    </form>
+
     <div id="loginError" style="display:none; margin-top:14px; color:var(--warn); font-family:var(--mono); font-size:12px;"></div>
   </div>
 </div>
@@ -473,13 +483,6 @@
 
   <!-- ================= USUARIOS ================= -->
   <div class="panel-content" id="view-usuarios">
-    <div class="panel" id="panelBootstrapAdmin" style="display:none;">
-      <div class="panel-head"><h2>Activar la gestión de usuarios</h2></div>
-      <div class="panel-sub">Todavía no hay ningún administrador configurado en el sistema. Tocá el botón para convertirte en el primer admin — esto se hace una sola vez, en toda la vida de la app.</div>
-      <div class="actions"><button type="button" class="btn" id="btnCrearPrimerAdmin">Convertirme en administrador</button></div>
-      <div class="status" id="bootstrapAdminStatus"></div>
-    </div>
-
     <div class="panel" id="panelSinPermisoUsuarios" style="display:none;">
       <div class="panel-head"><h2>Usuarios</h2></div>
 
@@ -2012,72 +2015,156 @@ async function cargarDatos(forzar){
 document.getElementById('reloadBtn').addEventListener('click', () => cargarDatos(true));
 
 // ============== LOGIN / SESIÓN ==============
+// Sistema propio (usuario/contraseña guardados en la colección "usuarios" de Firestore),
+// SIN Firebase Authentication. Elegido a conciencia para no depender del plan pago Blaze
+// mientras la app está en fase de demo/prueba.
 const loginScreen = document.getElementById('loginScreen');
 const appWrap = document.getElementById('appWrap');
 const loginError = document.getElementById('loginError');
 
+let sesionActual = null; // { uid, usuario, nombre, rol }
+let timerInactividad = null;
+const MINUTOS_INACTIVIDAD = 30;
+
+function guardarSesion(s){
+  sesionActual = s;
+  sessionStorage.setItem('cuperSesion', JSON.stringify(s));
+}
+function borrarSesionGuardada(){
+  sessionStorage.removeItem('cuperSesion');
+}
+function leerSesionGuardada(){
+  try { return JSON.parse(sessionStorage.getItem('cuperSesion')); } catch(e){ return null; }
+}
+
+function mostrarApp(){
+  loginScreen.style.display = 'none';
+  appWrap.style.display = 'block';
+  document.getElementById('loginPassword').value = '';
+  miRolUsuario = sesionActual.rol;
+  cargarDatos();
+  aplicarRestriccionesUI();
+  reiniciarTimerInactividad();
+}
+function mostrarLoginNormal(){
+  document.getElementById('formPrimerAdmin').style.display = 'none';
+  document.getElementById('loginForm').style.display = 'block';
+  loginScreen.style.display = 'flex';
+  appWrap.style.display = 'none';
+  detenerTimerInactividad();
+}
+function mostrarFormPrimerAdmin(){
+  document.getElementById('formPrimerAdmin').style.display = 'block';
+  document.getElementById('loginForm').style.display = 'none';
+  loginScreen.style.display = 'flex';
+  appWrap.style.display = 'none';
+}
+
+function reiniciarTimerInactividad(){
+  clearTimeout(timerInactividad);
+  timerInactividad = setTimeout(() => {
+    borrarSesionGuardada();
+    sesionActual = null;
+    mostrarLoginNormal();
+    loginError.textContent = 'Se cerró la sesión por 30 minutos de inactividad.';
+    loginError.style.display = 'block';
+  }, MINUTOS_INACTIVIDAD * 60 * 1000);
+}
+function detenerTimerInactividad(){ clearTimeout(timerInactividad); }
+['click','keydown','scroll','touchstart'].forEach(ev => {
+  document.addEventListener(ev, () => { if (sesionActual) reiniciarTimerInactividad(); });
+});
+
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const usuarioIngresado = document.getElementById('loginEmail').value.trim().toLowerCase();
-  const email = usuarioIngresado.includes('@') ? usuarioIngresado : usuarioIngresado + '@cupersrl.local';
   const pass = document.getElementById('loginPassword').value;
   loginError.style.display = 'none';
   try {
-    await firebase.auth().signInWithEmailAndPassword(email, pass);
-    // onAuthStateChanged se encarga de mostrar la app
-  } catch (err) {
-    let msg = 'No se pudo iniciar sesión.';
-    if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
-      msg = 'Usuario o contraseña incorrectos.';
-    } else if (err.code === 'auth/too-many-requests') {
-      msg = 'Demasiados intentos. Probá de nuevo en unos minutos.';
-    } else if (err.code === 'auth/user-disabled') {
-      msg = 'Este usuario tiene el acceso desactivado. Consultá con un administrador.';
+    const snap = await db.collection('usuarios').where('usuario', '==', usuarioIngresado).limit(1).get();
+    if (snap.empty || snap.docs[0].data().password !== pass) {
+      loginError.textContent = 'Usuario o contraseña incorrectos.';
+      loginError.style.display = 'block';
+      return;
     }
-    loginError.textContent = msg;
+    const doc = snap.docs[0];
+    const d = doc.data();
+    guardarSesion({ uid: doc.id, usuario: d.usuario, nombre: d.nombre || d.usuario, rol: d.rol || 'lectura' });
+    mostrarApp();
+  } catch (err) {
+    loginError.textContent = 'Error al conectar: ' + err.message;
     loginError.style.display = 'block';
   }
 });
 
 document.getElementById('logoutBtn').addEventListener('click', () => {
-  firebase.auth().signOut();
+  borrarSesionGuardada();
+  sesionActual = null;
+  mostrarLoginNormal();
 });
 
-// Pide usuario y contraseña siempre que se abre la app (no queda la sesión guardada)
-firebase.auth().setPersistence(firebase.auth.Auth.Persistence.NONE)
-  .then(() => firebase.auth().signOut())
-  .catch(() => {});
-
-firebase.auth().onAuthStateChanged((user) => {
-  if (user) {
-    loginScreen.style.display = 'none';
-    appWrap.style.display = 'block';
-    document.getElementById('loginPassword').value = '';
-    cargarDatos();
-    cargarMiRol();
-  } else {
-    loginScreen.style.display = 'flex';
-    appWrap.style.display = 'none';
+document.getElementById('formPrimerAdmin').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const statusEl = document.getElementById('primerAdminStatus');
+  const usuario = document.getElementById('primerAdminUsuario').value.trim().toLowerCase();
+  const pass = document.getElementById('primerAdminPassword').value;
+  statusEl.className = 'status'; statusEl.textContent = '';
+  if (!usuario || /\s/.test(usuario)) {
+    statusEl.textContent = 'Usuario inválido (sin espacios).';
+    statusEl.className = 'status err';
+    return;
+  }
+  if (!pass || pass.length < 6) {
+    statusEl.textContent = 'La contraseña necesita al menos 6 caracteres.';
+    statusEl.className = 'status err';
+    return;
+  }
+  try {
+    const yaHay = await db.collection('usuarios').limit(1).get();
+    if (!yaHay.empty) {
+      statusEl.textContent = 'Ya hay usuarios creados — pedile el acceso a un administrador.';
+      statusEl.className = 'status err';
+      return;
+    }
+    const ref = await db.collection('usuarios').add({
+      usuario, password: pass, nombre: usuario, rol: 'admin',
+      creadoEl: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    guardarSesion({ uid: ref.id, usuario, nombre: usuario, rol: 'admin' });
+    mostrarApp();
+  } catch (err) {
+    statusEl.textContent = 'Error: ' + err.message;
+    statusEl.className = 'status err';
   }
 });
 
-// ============== GESTIÓN DE USUARIOS (Cloud Functions con permisos de admin) ==============
-const cfFunctions = firebase.functions();
-const cfCrearPrimerAdmin = cfFunctions.httpsCallable('crearPrimerAdmin');
-const cfCrearUsuarioAdmin = cfFunctions.httpsCallable('crearUsuarioAdmin');
-const cfBorrarUsuarioAdmin = cfFunctions.httpsCallable('borrarUsuarioAdmin');
-const cfResetearPasswordAdmin = cfFunctions.httpsCallable('resetearPasswordAdmin');
-const cfCambiarRolUsuarioAdmin = cfFunctions.httpsCallable('cambiarRolUsuarioAdmin');
-const cfEditarNombreUsuarioAdmin = cfFunctions.httpsCallable('editarNombreUsuarioAdmin');
+// Al abrir la página: si hay sesión guardada (dura hasta cerrar la pestaña) la retoma;
+// si no hay ningún usuario creado todavía, ofrece armar el primer admin; si no, login normal.
+(async function iniciarPantalla(){
+  const previa = leerSesionGuardada();
+  if (previa) {
+    sesionActual = previa;
+    mostrarApp();
+    return;
+  }
+  try {
+    const snap = await db.collection('usuarios').limit(1).get();
+    if (snap.empty) mostrarFormPrimerAdmin();
+    else mostrarLoginNormal();
+  } catch (err) {
+    mostrarLoginNormal();
+  }
+})();
 
+// ============== GESTIÓN DE USUARIOS (directo a Firestore, sin Cloud Functions) ==============
 const ROL_LABEL = { admin: 'Admin', editor: 'Editor', lectura: 'Solo Lectura' };
-let miRolUsuario = null; // 'admin' | 'editor' | 'lectura' | null (sin doc todavía)
+let miRolUsuario = null; // 'admin' | 'editor' | 'lectura'
 
-function mensajeErrorCF(err, fallback){
+function mensajeErrorUsuarios(err, fallback){
   return (err && err.message) ? err.message : fallback;
 }
 
-// Se puede escribir (guardar/borrar/cargar) si es admin o editor. 'lectura' y null (sin rol asignado) no pueden.
+// Se puede escribir (guardar/borrar/cargar) si es admin o editor. 'lectura' no puede.
 function puedeEscribir(){
   return miRolUsuario === 'admin' || miRolUsuario === 'editor';
 }
@@ -2090,19 +2177,7 @@ function bloquearSiSoloLectura(){
   return true;
 }
 
-// Se llama apenas se loguea, para saber desde el principio si puede escribir o no.
-async function cargarMiRol(){
-  try {
-    const uid = firebase.auth().currentUser.uid;
-    const doc = await db.collection('usuarios').doc(uid).get();
-    miRolUsuario = doc.exists ? (doc.data().rol || null) : null;
-  } catch (err) {
-    miRolUsuario = null;
-  }
-  aplicarRestriccionesUI();
-}
-
-// Deshabilita visualmente los botones de escritura si el usuario es de Solo Lectura (o no tiene rol asignado todavía).
+// Deshabilita visualmente los botones de escritura si el usuario es de Solo Lectura.
 function aplicarRestriccionesUI(){
   const soloLectura = !puedeEscribir();
   const idsBotonesEscritura = ['btnGuardar', 'btnBorrar', 'btnCrearUsuario'];
@@ -2124,50 +2199,21 @@ function aplicarRestriccionesUI(){
   }
 }
 
-// Decide qué panel mostrar dentro de Usuarios: bootstrap (sin admin todavía), sin permiso, o gestión completa
+// Decide qué panel mostrar dentro de Usuarios: sin permiso, o gestión completa (el alta del
+// primer admin ya se resuelve antes, en la pantalla de login).
 async function prepararPanelUsuarios(){
-  const panelBootstrap = document.getElementById('panelBootstrapAdmin');
   const panelSinPermiso = document.getElementById('panelSinPermisoUsuarios');
   const panelGestion = document.getElementById('panelGestionUsuarios');
-  panelBootstrap.style.display = 'none';
   panelSinPermiso.style.display = 'none';
   panelGestion.style.display = 'none';
 
-  try {
-    const snap = await db.collection('usuarios').where('rol', '==', 'admin').limit(1).get();
-    if (snap.empty) {
-      panelBootstrap.style.display = 'block';
-      return;
-    }
-    if (miRolUsuario !== 'admin') {
-      panelSinPermiso.style.display = 'block';
-      return;
-    }
-    panelGestion.style.display = 'block';
-    cargarListadoUsuarios();
-  } catch (err) {
+  if (miRolUsuario !== 'admin') {
     panelSinPermiso.style.display = 'block';
-    panelSinPermiso.querySelector('.panel-sub').textContent = 'No se pudo cargar la sección de usuarios: ' + mensajeErrorCF(err, err.message);
+    return;
   }
+  panelGestion.style.display = 'block';
+  cargarListadoUsuarios();
 }
-
-document.getElementById('btnCrearPrimerAdmin').addEventListener('click', async () => {
-  const statusEl = document.getElementById('bootstrapAdminStatus');
-  const btn = document.getElementById('btnCrearPrimerAdmin');
-  statusEl.className = 'status';
-  btn.disabled = true;
-  try {
-    await cfCrearPrimerAdmin();
-    statusEl.textContent = '✔ Listo, ya sos administrador. Cargando la gestión de usuarios...';
-    statusEl.className = 'status ok';
-    await cargarMiRol();
-    setTimeout(prepararPanelUsuarios, 500);
-  } catch (err) {
-    statusEl.textContent = mensajeErrorCF(err, 'No se pudo completar la acción.');
-    statusEl.className = 'status err';
-  }
-  btn.disabled = false;
-});
 
 document.getElementById('btnMostrarNuevoUsuario').addEventListener('click', () => {
   const wrap = document.getElementById('formNuevoUsuarioWrap');
@@ -2190,7 +2236,7 @@ async function cargarListadoUsuarios(){
   statusEl.textContent = '';
   try {
     const snap = await db.collection('usuarios').orderBy('usuario').get();
-    const miUid = firebase.auth().currentUser.uid;
+    const miUid = sesionActual.uid;
 
     cont.innerHTML = snap.docs.map(doc => {
       const u = doc.data();
@@ -2251,20 +2297,26 @@ async function cargarListadoUsuarios(){
         const nuevaPass = card.querySelector('.inpEditPassword').value;
         statusEdit.className = 'status';
         try {
-          if (nuevoNombre && nuevoNombre !== nombreActual) {
-            await cfEditarNombreUsuarioAdmin({ uid, nombre: nuevoNombre });
+          if (nuevaPass && nuevaPass.length < 6) {
+            throw new Error('La nueva contraseña debe tener al menos 6 caracteres.');
           }
-          await cfCambiarRolUsuarioAdmin({ uid, rol: nuevoRol });
-          if (nuevaPass) {
-            if (nuevaPass.length < 6) { throw new Error('La nueva contraseña debe tener al menos 6 caracteres.'); }
-            await cfResetearPasswordAdmin({ uid, nuevaPassword: nuevaPass });
+          const cambios = { rol: nuevoRol };
+          if (nuevoNombre) cambios.nombre = nuevoNombre;
+          if (nuevaPass) cambios.password = nuevaPass;
+          await db.collection('usuarios').doc(uid).update(cambios);
+
+          // Si el que se edita es quien está logueado ahora, actualizamos también la sesión activa.
+          if (uid === sesionActual.uid) {
+            guardarSesion({ ...sesionActual, nombre: cambios.nombre || sesionActual.nombre, rol: nuevoRol });
+            miRolUsuario = nuevoRol;
+            aplicarRestriccionesUI();
           }
+
           statusEdit.textContent = '✔ Cambios guardados.';
           statusEdit.className = 'status ok';
-          if (uid === firebase.auth().currentUser.uid) await cargarMiRol();
           setTimeout(cargarListadoUsuarios, 600);
         } catch (err) {
-          statusEdit.textContent = mensajeErrorCF(err, 'No se pudieron guardar los cambios.');
+          statusEdit.textContent = mensajeErrorUsuarios(err, 'No se pudieron guardar los cambios.');
           statusEdit.className = 'status err';
         }
       });
@@ -2274,17 +2326,17 @@ async function cargarListadoUsuarios(){
         btnEliminar.addEventListener('click', async () => {
           if (!confirm(`¿Borrar definitivamente a "${nombreActual}"? No se puede deshacer.`)) return;
           try {
-            await cfBorrarUsuarioAdmin({ uid });
+            await db.collection('usuarios').doc(uid).delete();
             cargarListadoUsuarios();
           } catch (err) {
-            statusEl.textContent = mensajeErrorCF(err, 'No se pudo borrar el usuario.');
+            statusEl.textContent = mensajeErrorUsuarios(err, 'No se pudo borrar el usuario.');
             statusEl.className = 'status err';
           }
         });
       }
     });
   } catch (err) {
-    statusEl.textContent = 'No se pudo cargar el listado: ' + mensajeErrorCF(err, err.message);
+    statusEl.textContent = 'No se pudo cargar el listado: ' + mensajeErrorUsuarios(err, err.message);
     statusEl.className = 'status err';
   }
 }
@@ -2296,12 +2348,12 @@ document.getElementById('btnCrearUsuario').addEventListener('click', async () =>
   const rol = document.getElementById('nuevoRol').value;
 
   statusEl.className = 'status';
-  if (!usuarioIngresado || !pass) {
-    statusEl.textContent = 'Completá usuario y contraseña.';
+  if (!usuarioIngresado || /\s/.test(usuarioIngresado)) {
+    statusEl.textContent = 'Usuario inválido (sin espacios).';
     statusEl.className = 'status err';
     return;
   }
-  if (pass.length < 6) {
+  if (!pass || pass.length < 6) {
     statusEl.textContent = 'La contraseña necesita al menos 6 caracteres.';
     statusEl.className = 'status err';
     return;
@@ -2310,14 +2362,21 @@ document.getElementById('btnCrearUsuario').addEventListener('click', async () =>
   const btn = document.getElementById('btnCrearUsuario');
   btn.disabled = true;
   try {
-    await cfCrearUsuarioAdmin({ usuario: usuarioIngresado, password: pass, rol });
+    const existe = await db.collection('usuarios').where('usuario', '==', usuarioIngresado).limit(1).get();
+    if (!existe.empty) {
+      throw new Error('Ese usuario ya existe.');
+    }
+    await db.collection('usuarios').add({
+      usuario: usuarioIngresado, password: pass, nombre: usuarioIngresado, rol,
+      creadoEl: firebase.firestore.FieldValue.serverTimestamp()
+    });
     statusEl.textContent = `✔ Usuario "${usuarioIngresado}" creado con rol ${ROL_LABEL[rol]}.`;
     statusEl.className = 'status ok';
     document.getElementById('nuevoUsuario').value = '';
     document.getElementById('nuevoPassword').value = '';
     cargarListadoUsuarios();
   } catch (err) {
-    statusEl.textContent = mensajeErrorCF(err, 'No se pudo crear el usuario.');
+    statusEl.textContent = mensajeErrorUsuarios(err, 'No se pudo crear el usuario.');
     statusEl.className = 'status err';
   }
   btn.disabled = false;
