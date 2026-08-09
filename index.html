@@ -611,7 +611,7 @@
         <div class="row2">
           <div>
             <label>Nº de Factura</label>
-            <input type="text" id="cobFacNro" placeholder="Ej: A09-00191 (vacío si no tiene)">
+            <input type="text" id="cobFacNro" placeholder="Ej: A09-00191 (vacío si no tiene)" style="text-transform:uppercase;">
           </div>
           <div>
             <label>Conciliación (sin factura)</label>
@@ -3261,14 +3261,22 @@ function limpiarCobForm(){
 $('cobBtnNuevo').addEventListener('click', limpiarCobForm);
 
 async function cobBuscarPorOrden(){
-  const orden = $('cobBuscarOrden').value.trim();
-  if (!orden) return;
+  const ordenTipeada = $('cobBuscarOrden').value.trim();
+  if (!ordenTipeada) return;
   $('cobBuscarHint').textContent = 'Buscando...';
   $('cobResultadosMultiples').innerHTML = '';
   try {
-    const doc = await db.collection('ordenes').doc(orden).get();
+    let doc = await db.collection('ordenes').doc(ordenTipeada).get();
+    let orden = ordenTipeada;
     if (!doc.exists) {
-      $('cobBuscarHint').textContent = `No existe ninguna OR con el número "${orden}".`;
+      const ordenCompletada = normalizarPrefijoOrden(ordenTipeada);
+      if (ordenCompletada !== ordenTipeada) {
+        doc = await db.collection('ordenes').doc(ordenCompletada).get();
+        orden = ordenCompletada;
+      }
+    }
+    if (!doc.exists) {
+      $('cobBuscarHint').textContent = `No existe ninguna OR con el número "${ordenTipeada}".`;
       $('cobFormPanel').style.display = 'none';
       return;
     }
@@ -3285,8 +3293,9 @@ $('cobBuscarOrden').addEventListener('keydown', (e) => { if (e.key === 'Enter') 
 const cobResOrdenEl = $('cobResultadosOrden');
 function ocultarCobResultadosOrden(){ cobResOrdenEl.style.display = 'none'; cobResOrdenEl.innerHTML = ''; }
 
-async function cobBuscarPorPrefijoOrden(prefijo){
-  if (!prefijo) { ocultarCobResultadosOrden(); return; }
+async function cobBuscarPorPrefijoOrden(prefijoOriginal){
+  if (!prefijoOriginal) { ocultarCobResultadosOrden(); return; }
+  const prefijo = normalizarPrefijoOrden(prefijoOriginal);
   try {
     const snap = await db.collection('ordenes')
       .orderBy(firebase.firestore.FieldPath.documentId())
@@ -3296,7 +3305,7 @@ async function cobBuscarPorPrefijoOrden(prefijo){
       .get();
 
     if (snap.empty) {
-      cobResOrdenEl.innerHTML = `<div style="padding:10px 12px; color:var(--text-dim); font-size:13px;">No hay OR que empiecen con "${prefijo}".</div>`;
+      cobResOrdenEl.innerHTML = `<div style="padding:10px 12px; color:var(--text-dim); font-size:13px;">No hay OR que empiecen con "${prefijoOriginal}".</div>`;
       cobResOrdenEl.style.display = 'block';
       return;
     }
@@ -3342,7 +3351,7 @@ $('cobBuscarOrden').addEventListener('focus', () => {
 });
 
 async function cobBuscarPorFactura(){
-  const factura = $('cobBuscarFactura').value.trim();
+  const factura = $('cobBuscarFactura').value.trim().toUpperCase();
   if (!factura) return;
   $('cobBuscarHint').textContent = 'Buscando...';
   $('cobResultadosMultiples').innerHTML = '';
@@ -3383,8 +3392,9 @@ $('cobBuscarFactura').addEventListener('keydown', (e) => { if (e.key === 'Enter'
 const cobResFacturaEl = $('cobResultadosFacturaLive');
 function ocultarCobResultadosFactura(){ cobResFacturaEl.style.display = 'none'; cobResFacturaEl.innerHTML = ''; }
 
-async function cobBuscarPorPrefijoFactura(prefijo){
-  if (!prefijo) { ocultarCobResultadosFactura(); return; }
+async function cobBuscarPorPrefijoFactura(prefijoOriginal){
+  if (!prefijoOriginal) { ocultarCobResultadosFactura(); return; }
+  const prefijo = prefijoOriginal.toUpperCase();
   try {
     const snap = await db.collection('ordenes')
       .orderBy('facNro')
@@ -3394,7 +3404,7 @@ async function cobBuscarPorPrefijoFactura(prefijo){
       .get();
 
     if (snap.empty) {
-      cobResFacturaEl.innerHTML = `<div style="padding:10px 12px; color:var(--text-dim); font-size:13px;">No hay facturas que empiecen con "${prefijo}".</div>`;
+      cobResFacturaEl.innerHTML = `<div style="padding:10px 12px; color:var(--text-dim); font-size:13px;">No hay facturas que empiecen con "${prefijoOriginal}".</div>`;
       cobResFacturaEl.style.display = 'block';
       return;
     }
@@ -3444,7 +3454,7 @@ $('cobForm').addEventListener('submit', async (e) => {
   if (!cobOrdenActual) return;
 
   const montoCobrado = Math.max(0, Math.min(parseMiles($('cobMontoCobrado').value), cobOrdenTotal));
-  const facNroTrim = $('cobFacNro').value.trim();
+  const facNroTrim = $('cobFacNro').value.trim().toUpperCase();
 
   const rec = {
     fechaFact: $('cobFechaFact').value || '',
