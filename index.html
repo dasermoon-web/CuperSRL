@@ -812,6 +812,10 @@ function getMontoCobrado(o){
 function getSaldoPendiente(o){
   return Math.max(0, (o.total || 0) - getMontoCobrado(o));
 }
+// Definición de "cobrada": ni pendiente de cancelar (columna O) ni facturaImpaga (columna AG).
+function estaCobrada(o){
+  return !o.pendienteCobro && !o.facturaImpaga;
+}
 // Cuánto se le debe realmente al taller por esta OR — un solo número, sin importar
 // si ya tiene factura, si es un anticipo, o si el checkbox de facturación está tildado o no.
 function montoAdeudado(o){
@@ -932,7 +936,7 @@ function procesarDatos(docs){
       cierresMap[mesCierre].CantidadCerradas += 1;
       cierresMap[mesCierre].ImporteCerrado += (rec.total || 0);
       if (categoria(rec) === 'Facturado' && rec.fechaFact && rec.fechaFact !== '') cierresMap[mesCierre].ImporteFacturado += (rec.total || 0); // de las cerradas ese mes, cuántas tienen N° de factura Y fecha de facturación cargada
-      if (rec.fechaCobro && getSaldoPendiente(rec) <= 0) cierresMap[mesCierre].ImporteCobrado += (rec.total || 0); // de las cerradas ese mes, cuánto ya se cobró (factura o conciliado)
+      if (estaCobrada(rec)) cierresMap[mesCierre].ImporteCobrado += (rec.total || 0); // de las cerradas ese mes, cuánto ya se cobró (factura o conciliado)
     }
 
     // --- Facturas cobradas por mes (para la tendencia de "Fac. Cobradas") ---
@@ -1847,7 +1851,7 @@ function mostrarOrdenesDelMes(mesKey, label){
   document.getElementById('detalleMesOrdenesTitulo').textContent = `OR cerradas — ${label} (${ordenes.length})`;
   document.getElementById('detalleMesOrdenesBody').innerHTML = ordenes.length
     ? ordenes.map(o => {
-        const cobrada = !!o.fechaCobro && getSaldoPendiente(o) <= 0;
+        const cobrada = estaCobrada(o);
         return `
           <tr>
             <td>${o.orden}</td>
@@ -1883,7 +1887,7 @@ function mostrarOrdenesDelMes(mesKey, label){
   document.getElementById('detalleMesFacturadoWrap').style.display = 'block';
 
   // --- Listado Cobrado: de esas mismas cerradas, cuáles ya están cobradas (factura o conciliado) ---
-  const cobradas = ordenes.filter(o => o.fechaCobro && getSaldoPendiente(o) <= 0);
+  const cobradas = ordenes.filter(estaCobrada);
   mesCobradoExportData = { titulo: `Cobrado — ${label}`, lista: cobradas };
   document.getElementById('detalleMesCobradoTitulo').textContent = `Cobrado — ${label} (${cobradas.length})`;
   document.getElementById('detalleMesCobradoBody').innerHTML = cobradas.length
@@ -1999,7 +2003,7 @@ conectarBotonReporte(
   () => mesOrdenesExportData,
   ['Orden', 'Cliente', 'Vehículo', 'Dominio', 'Factura', 'Cobrada', 'Importe'],
   o => {
-    const cobrada = !!o.fechaCobro && getSaldoPendiente(o) <= 0;
+    const cobrada = estaCobrada(o);
     return [o.orden, toTitleCase(o.razonSocial || ''), toTitleCase(o.vehiculo || ''), o.dominio || '', o.facNro || (o.facSN ? o.facSN : ''), cobrada ? 'Sí' : 'No', o.total || 0];
   },
   [12, 30, 22, 14, 14, 12, 16],
