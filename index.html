@@ -619,36 +619,40 @@
           </div>
         </div>
 
-        <label>Mes / año de cobro</label>
-        <div class="month-picker-wrap" style="position:relative;">
-          <button type="button" id="cobFechaCobroBtn" class="btn secondary" style="width:100%; text-align:left; font-weight:400;">Sin cobrar</button>
-          <input type="hidden" id="cobFechaCobro">
-          <div id="cobFechaCobroPanel" style="display:none; position:absolute; top:calc(100% + 4px); left:0; z-index:30; background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:14px; width:260px; box-shadow:0 8px 24px rgba(0,0,0,0.4);">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-              <button type="button" id="cobFechaCobroPrevYear" class="btn secondary" style="padding:4px 12px;">‹</button>
-              <span id="cobFechaCobroYearLabel" style="font-family:var(--mono); color:var(--green); font-size:15px;"></span>
-              <button type="button" id="cobFechaCobroNextYear" class="btn secondary" style="padding:4px 12px;">›</button>
-            </div>
-            <div id="cobFechaCobroMonthsGrid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:6px;"></div>
-            <button type="button" id="cobFechaCobroClear" class="btn secondary" style="width:100%; margin-top:12px;">Vaciar (no cobrado)</button>
+        <div class="hint" id="cobUltimoPagoHint">Todavía no registraste ningún pago.</div>
+
+        <label style="margin-top:14px;">Historial de pagos</label>
+        <div class="hint" style="margin-bottom:8px;">Cada pago que te hacen (parcial o total) queda registrado acá con su fecha — así no hace falta dividir la OR en sub-OR cuando el cliente paga en cuotas a lo largo de varios meses.</div>
+
+        <div id="cobPagosLista" style="margin-bottom:10px;"></div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:8px; align-items:end;">
+          <div>
+            <label style="font-size:11px;">Mes del pago</label>
+            <input type="month" id="cobNuevoPagoMes">
           </div>
+          <div>
+            <label style="font-size:11px;">Monto de ese pago</label>
+            <div style="position:relative;">
+              <span style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--text-dim); font-size:13px; pointer-events:none;">$</span>
+              <input type="text" inputmode="numeric" id="cobNuevoPagoMonto" placeholder="Ej: 200.000" style="padding-left:22px;">
+            </div>
+          </div>
+          <button type="button" class="btn secondary" id="cobBtnAgregarPago" style="padding:10px 16px;">+ Agregar</button>
         </div>
-        <div class="hint">Vacío = todavía no se cobró</div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:14px; padding:10px 14px; background:var(--panel-2); border:1px solid var(--line); border-radius:6px;">
+          <span style="font-size:12px; color:var(--text-dim);">Total cobrado hasta ahora</span>
+          <strong id="cobMontoCobradoTotal" style="font-family:var(--mono); font-size:15px; color:var(--green);">$0</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; padding:10px 14px; background:var(--panel-2); border:1px solid var(--line); border-radius:6px;">
+          <span style="font-size:12px; color:var(--text-dim);">Saldo pendiente</span>
+          <strong id="cobSaldoPendiente" style="font-family:var(--mono); font-size:15px;">$0</strong>
+        </div>
 
         <div class="checkbox-row">
           <input type="checkbox" id="cobPendienteCobro">
           <label for="cobPendienteCobro">Marcar como "sin cancelar" (columna O del Excel)</label>
-        </div>
-
-        <label style="margin-top:14px;">Monto cobrado hasta ahora</label>
-        <div style="position:relative;">
-          <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-dim); font-size:14px; pointer-events:none;">$</span>
-          <input type="text" inputmode="numeric" id="cobMontoCobrado" placeholder="Ej: 2.000.000" style="padding-left:26px;">
-        </div>
-        <div class="hint">Si te pagaron una parte, cargá acá cuánto entró en total (no solo lo nuevo). Si te terminan de pagar el resto, volvés a esta OR y actualizás el número.</div>
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; padding:10px 14px; background:var(--panel-2); border:1px solid var(--line); border-radius:6px;">
-          <span style="font-size:12px; color:var(--text-dim);">Saldo pendiente</span>
-          <strong id="cobSaldoPendiente" style="font-family:var(--mono); font-size:15px;">$0</strong>
         </div>
 
         <div class="actions">
@@ -2930,7 +2934,6 @@ function crearSelectorMes(prefijo, textoVacio){
   };
 }
 function setCobFechaFact(valor){ $('cobFechaFact').value = valor || ''; }
-const setCobFechaCobro = crearSelectorMes('cobFechaCobro', 'Sin cobrar');
 
 function ocultarResultados(){
   resultadosEl.style.display = 'none';
@@ -3195,10 +3198,79 @@ $('buscarDominio').addEventListener('keydown', (e) => {
 // ============== COBRANZA ==============
 let cobOrdenActual = null;
 let cobOrdenTotal = 0;
+let cobPagosActuales = []; // [{ fecha:'YYYY-MM', monto:number }, ...] — historial de pagos de la OR que se está editando
+
+function totalPagos(){
+  return cobPagosActuales.reduce((acc, p) => acc + (p.monto || 0), 0);
+}
+function ultimoMesPago(){
+  if (!cobPagosActuales.length) return '';
+  return cobPagosActuales.map(p => p.fecha).sort().slice(-1)[0]; // el más reciente en orden cronológico
+}
+
+function renderCobPagosLista(){
+  const cont = $('cobPagosLista');
+  const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  if (!cobPagosActuales.length) {
+    cont.innerHTML = `<div class="hint" style="margin:0;">Todavía no hay pagos registrados.</div>`;
+  } else {
+    const ordenados = cobPagosActuales.map((p, i) => ({ ...p, _i: i })).sort((a,b) => a.fecha.localeCompare(b.fecha));
+    cont.innerHTML = ordenados.map(p => {
+      let etiquetaMes = p.fecha;
+      if (/^\d{4}-\d{2}$/.test(p.fecha)) {
+        const [y, m] = p.fecha.split('-');
+        etiquetaMes = MESES[parseInt(m,10)-1] + ' / ' + y;
+      }
+      return `
+        <div class="cob-pago-row" data-i="${p._i}" style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:var(--panel-2); border:1px solid var(--line); border-radius:6px; margin-bottom:6px;">
+          <span style="font-family:var(--mono); font-size:12px; color:var(--text-dim);">${etiquetaMes}</span>
+          <span style="font-family:var(--mono); font-size:13px; font-weight:700;">${fmtMoney(p.monto || 0)}</span>
+          <button type="button" class="btnBorrarPago" style="background:none; border:none; color:var(--warn); cursor:pointer; font-size:15px; padding:0 4px;" title="Borrar este pago">✕</button>
+        </div>`;
+    }).join('');
+    cont.querySelectorAll('.btnBorrarPago').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const i = parseInt(btn.closest('.cob-pago-row').dataset.i, 10);
+        cobPagosActuales.splice(i, 1);
+        renderCobPagosLista();
+        actualizarSaldoCobForm();
+      });
+    });
+  }
+  const hintEl = $('cobUltimoPagoHint');
+  const ultimo = ultimoMesPago();
+  if (!ultimo) {
+    hintEl.textContent = 'Todavía no registraste ningún pago.';
+  } else {
+    const [y, m] = ultimo.split('-');
+    hintEl.textContent = `Último pago registrado: ${MESES[parseInt(m,10)-1]} / ${y}.`;
+  }
+}
+
+$('cobBtnAgregarPago').addEventListener('click', () => {
+  const mes = $('cobNuevoPagoMes').value; // ya viene como 'YYYY-MM' del <input type="month">
+  const monto = parseMiles($('cobNuevoPagoMonto').value);
+  if (!mes) { alert('Elegí el mes de ese pago.'); return; }
+  if (!monto || monto <= 0) { alert('Cargá el monto de ese pago.'); return; }
+  cobPagosActuales.push({ fecha: mes, monto });
+  $('cobNuevoPagoMes').value = '';
+  $('cobNuevoPagoMonto').value = '';
+  renderCobPagosLista();
+  actualizarSaldoCobForm();
+});
+$('cobNuevoPagoMonto').addEventListener('focus', () => {
+  const n = parseMiles($('cobNuevoPagoMonto').value);
+  $('cobNuevoPagoMonto').value = n ? n : '';
+});
+$('cobNuevoPagoMonto').addEventListener('blur', () => {
+  const n = parseMiles($('cobNuevoPagoMonto').value);
+  $('cobNuevoPagoMonto').value = n ? n.toLocaleString('es-AR') : '';
+});
 
 function actualizarSaldoCobForm(){
-  const cobrado = parseMiles($('cobMontoCobrado').value);
+  const cobrado = totalPagos();
   const saldo = Math.max(0, cobOrdenTotal - cobrado);
+  $('cobMontoCobradoTotal').textContent = fmtMoney(cobrado);
   const el = $('cobSaldoPendiente');
   el.textContent = fmtMoney(saldo);
   el.style.color = saldo > 0 ? 'var(--warn)' : 'var(--green)';
@@ -3211,10 +3283,19 @@ function cargarOrdenEnCobForm(orden, d){
   setCobCondicionUI(d.condicion || '');
   $('cobFacNro').value = d.facNro || '';
   $('cobFacSN').value = d.facSN || '';
-  setCobFechaCobro(d.fechaCobro || '');
   $('cobPendienteCobro').checked = !!d.pendienteCobro;
-  const cobradoActual = getMontoCobrado(d);
-  $('cobMontoCobrado').value = cobradoActual ? cobradoActual.toLocaleString('es-AR') : '';
+
+  // Historial de pagos: si ya existe el array, se usa tal cual. Si es una OR vieja que
+  // todavía no tiene historial (solo el monto/fecha únicos de siempre), se arma un primer
+  // registro con ese dato para no perder la información ya cargada.
+  if (Array.isArray(d.pagos) && d.pagos.length) {
+    cobPagosActuales = d.pagos.map(p => ({ fecha: p.fecha || '', monto: p.monto || 0 }));
+  } else {
+    const montoLegacy = getMontoCobrado(d);
+    const fechaLegacy = (d.fechaCobro && d.fechaCobro !== 'SI') ? d.fechaCobro.slice(0,7) : '';
+    cobPagosActuales = montoLegacy > 0 ? [{ fecha: fechaLegacy, monto: montoLegacy }] : [];
+  }
+  renderCobPagosLista();
   actualizarSaldoCobForm();
 
   $('cobFormTitulo').textContent = `OR ${orden}`;
@@ -3228,25 +3309,14 @@ function cargarOrdenEnCobForm(orden, d){
   $('cobFormPanel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-$('cobMontoCobrado').addEventListener('input', actualizarSaldoCobForm);
-$('cobMontoCobrado').addEventListener('focus', () => {
-  const n = parseMiles($('cobMontoCobrado').value);
-  $('cobMontoCobrado').value = n ? n : '';
-});
-$('cobMontoCobrado').addEventListener('blur', () => {
-  const n = parseMiles($('cobMontoCobrado').value);
-  $('cobMontoCobrado').value = n ? n.toLocaleString('es-AR') : '';
-  actualizarSaldoCobForm();
-});
-
 function limpiarCobForm(){
   cobOrdenActual = null;
   cobOrdenTotal = 0;
+  cobPagosActuales = [];
   $('cobForm').reset();
   setCobFechaFact('');
   setCobCondicionUI('');
-  setCobFechaCobro('');
-  $('cobMontoCobrado').value = '';
+  renderCobPagosLista();
   actualizarSaldoCobForm();
   $('cobFormPanel').style.display = 'none';
   $('cobBuscarHint').textContent = '';
@@ -3453,7 +3523,8 @@ $('cobForm').addEventListener('submit', async (e) => {
   if (bloquearSiSoloLectura()) return;
   if (!cobOrdenActual) return;
 
-  const montoCobrado = Math.max(0, Math.min(parseMiles($('cobMontoCobrado').value), cobOrdenTotal));
+  const montoCobrado = Math.min(totalPagos(), cobOrdenTotal);
+  const ultimoMes = ultimoMesPago();
   const facNroTrim = $('cobFacNro').value.trim().toUpperCase();
 
   const rec = {
@@ -3461,7 +3532,8 @@ $('cobForm').addEventListener('submit', async (e) => {
     condicion: $('cobCondicion').value.trim(),
     facNro: facNroTrim,
     facSN: $('cobFacSN').value.trim(),
-    fechaCobro: $('cobFechaCobro').value ? ($('cobFechaCobro').value === 'SI' ? 'SI' : $('cobFechaCobro').value + '-01') : '',
+    fechaCobro: ultimoMes ? ultimoMes + '-01' : '',
+    pagos: cobPagosActuales,
     pendienteCobro: $('cobPendienteCobro').checked,
     montoCobrado: montoCobrado,
     facturaImpaga: facNroTrim !== '' && montoCobrado < cobOrdenTotal,
