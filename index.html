@@ -422,10 +422,11 @@
       <div class="hint" id="buscarHint"></div>
 
       <form id="form" style="margin-top:16px;">
-        <label>Nº de Orden *</label>
-        <input type="text" id="orden" required placeholder="Ej: 01528">
-
-        <div class="row2">
+        <div class="row3">
+          <div>
+            <label>Nº de Orden *</label>
+            <input type="text" id="orden" required placeholder="Ej: 01528">
+          </div>
           <div>
             <label>Fecha de ingreso</label>
             <input type="date" id="fechaIng">
@@ -433,25 +434,18 @@
           <div>
             <label>Fecha de cierre</label>
             <input type="date" id="fechaCierre">
-            <div class="hint">Vacío = orden todavía abierta (en curso)</div>
           </div>
         </div>
+        <div class="hint">Fecha de cierre vacía = orden todavía abierta (en curso)</div>
 
-        <label>Cliente (Razón Social)</label>
+        <label style="margin-top:14px;">Cliente (Razón Social)</label>
         <input type="text" id="razonSocial" placeholder="Ej: Delta Mining">
 
-        <div class="row2">
+        <div class="row3">
           <div>
             <label>Teléfono</label>
             <input type="text" id="clienteTelefono" placeholder="Ej: 264 456-7890">
           </div>
-          <div>
-            <label>Kilómetros</label>
-            <input type="text" inputmode="numeric" id="clienteKm" placeholder="Ej: 145.000">
-          </div>
-        </div>
-
-        <div class="row2">
           <div>
             <label>Vehículo</label>
             <input type="text" id="vehiculo" placeholder="Ej: Toyota Hilux">
@@ -462,10 +456,18 @@
           </div>
         </div>
 
-        <label>Total c/IVA</label>
-        <div style="position:relative;">
-          <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-dim); font-size:14px; pointer-events:none;">$</span>
-          <input type="text" inputmode="numeric" id="total" placeholder="Ej: 250.000" style="padding-left:26px;">
+        <div class="row2">
+          <div>
+            <label>Kilómetros</label>
+            <input type="text" inputmode="numeric" id="clienteKm" placeholder="Ej: 145.000">
+          </div>
+          <div>
+            <label>Total c/IVA</label>
+            <div style="position:relative;">
+              <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-dim); font-size:14px; pointer-events:none;">$</span>
+              <input type="text" inputmode="numeric" id="total" placeholder="Ej: 250.000" style="padding-left:26px;">
+            </div>
+          </div>
         </div>
 
         <div class="actions">
