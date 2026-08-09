@@ -400,9 +400,6 @@
 
     <div class="panel">
       <div class="panel-head"><h2>Cargar orden desde PDF</h2></div>
-      <div class="panel-sub">
-        Arrastrá el PDF de una orden ya cerrada, o elegilo con el botón. Se completa sola: se guarda en "Historial por Dominio" (repuestos y mano de obra) y se crea/actualiza la OR en el dashboard de facturación (sin datos de factura todavía — eso lo completás después en "Ajuste puntual" cuando el cliente pague). Si volvés a subir el PDF de la misma orden, pisa los datos anteriores.
-      </div>
       <div id="pdfDropZone" style="border:2px dashed var(--line); border-radius:8px; padding:22px 16px; text-align:center; cursor:pointer; background:var(--panel-2); transition:border-color 0.15s, background 0.15s;">
         <div id="pdfDropText" style="font-size:13px; color:var(--text-dim);">📄 Arrastrá el PDF acá, o <span style="color:var(--green); text-decoration:underline;">elegí un archivo</span></div>
         <input type="file" id="pdfInput" accept="application/pdf" style="display:none;">
@@ -415,7 +412,6 @@
 
     <div class="panel">
       <div class="panel-head"><h2>Ajuste puntual de una OR</h2></div>
-      <div class="panel-sub">Para corregir un dato suelto sin tener que volver al Excel — buscá la OR por número y editá lo que haga falta.</div>
       <label>Buscar OR existente por número</label>
       <div class="search-row" style="position:relative;">
         <input type="text" id="buscarOrden" placeholder="Ej: 01528" autocomplete="off">
@@ -1227,7 +1223,7 @@ function renderKPIsOrdenes(){
 
   const kpiRow = document.getElementById('kpi-row-ordenes');
   const kpis = [
-    { tipo: 'detalleMensual', label: `OR cerradas — ${monthLabel(mesRef)}`, value: String(datosCierre.CantidadCerradas), color:'orange', icon:'chart', sub:'Tocá para ver el detalle completo' },
+    { tipo: 'detalleMensual', label: `OR cerradas — ${monthLabel(mesRef)}`, value: String(datosCierre.CantidadCerradas), color:'orange', icon:'chart', sub:'Ver detalle completo' },
     { tipo: 'abiertas', label: 'Órdenes abiertas ahora', value: String(openOrders.length), color:'yellow', icon:'door', sub:'En proceso de reparación' },
   ];
   kpiRow.innerHTML = kpis.map(k => `
