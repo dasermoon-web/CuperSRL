@@ -903,7 +903,7 @@ function procesarDatos(docs){
       if (!cierresMap[mesCierre]) cierresMap[mesCierre] = { Mes: mesCierre, CantidadCerradas: 0, ImporteCerrado: 0, ImporteCobrado: 0, ImporteFacturado: 0 };
       cierresMap[mesCierre].CantidadCerradas += 1;
       cierresMap[mesCierre].ImporteCerrado += (rec.total || 0);
-      if (categoria(rec) === 'Facturado') cierresMap[mesCierre].ImporteFacturado += (rec.total || 0); // de las cerradas ese mes, cuántas ya tienen N° de factura
+      if (categoria(rec) === 'Facturado' && rec.fechaFact && rec.fechaFact !== '') cierresMap[mesCierre].ImporteFacturado += (rec.total || 0); // de las cerradas ese mes, cuántas tienen N° de factura Y fecha de facturación cargada
       if (rec.fechaCobro && getSaldoPendiente(rec) <= 0) cierresMap[mesCierre].ImporteCobrado += (rec.total || 0); // de las cerradas ese mes, cuánto ya se cobró (factura o conciliado)
     }
 
