@@ -361,8 +361,8 @@
   <div class="panel-content active" id="view-inicio">
     <div id="alertaMoraInicio"></div>
     <div class="panel" id="panelGraficoInicio">
-      <div class="panel-head"><h2 id="graficoInicioTitulo">Año actual — OR cerradas, facturadas/conciliadas y cobradas</h2></div>
-      <div class="panel-sub">De las OR cerradas cada mes: cuántas ya están facturadas y cuántas ya están cobradas (a hoy) — no es lo mismo que "facturado en el mes" de la pestaña Facturación.</div>
+      <div class="panel-head"><h2 id="graficoInicioTitulo">Año actual — OR Cerradas, Facturadas, Cobradas y Conciliadas</h2></div>
+      <div class="panel-sub">De las OR cerradas por cada mes muestra cuántas ya están facturadas y cuántas ya están cobradas al día de hoy.</div>
       <div id="graficoInicioScroll" style="overflow-x:auto;"></div>
       <div style="display:flex; gap:18px; flex-wrap:wrap; margin-top:10px; font-family:var(--mono); font-size:11px; color:var(--text-dim);">
         <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:var(--green); margin-right:5px;"></span>Cerrado</span>
@@ -1017,7 +1017,7 @@ function renderGraficoInicio(){
     clavesAnio.push(`${anioActual}-${String(m+1).padStart(2,'0')}`);
   }
   const tituloEl = document.getElementById('graficoInicioTitulo');
-  if (tituloEl) tituloEl.textContent = `Año ${anioActual} — OR cerradas, facturadas/conciliadas y cobradas`;
+  if (tituloEl) tituloEl.textContent = `Año ${anioActual} — OR Cerradas, Facturadas, Cobradas y Conciliadas`;
 
   const NOMBRES_MES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   const datosPorMes = clavesAnio.map(mesKey => {
