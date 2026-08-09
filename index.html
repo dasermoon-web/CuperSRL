@@ -1131,21 +1131,27 @@ function prepararSelectorMes(seccion, varName, idPrev, idLabel, idNext, onCambio
   document.getElementById(idPrev).onclick = () => {
     const idx = listaMeses.indexOf(_mesesSeccion[seccion]);
     if (idx > 0) {
+      const tipoAbierto = kpiActivo;
+      const colorAbierto = tipoAbierto ? document.querySelector(`.kpi[data-tipo="${tipoAbierto}"]`)?.dataset.color : null;
       _mesesSeccion[seccion] = listaMeses[idx - 1];
       window[varName] = _mesesSeccion[seccion];
       pintar();
       onCambio();
-      cerrarDetalleKPI();
+      if (tipoAbierto) { kpiActivo = null; mostrarDetalleKPI(tipoAbierto, colorAbierto || 'green'); }
+      else cerrarDetalleKPI();
     }
   };
   document.getElementById(idNext).onclick = () => {
     const idx = listaMeses.indexOf(_mesesSeccion[seccion]);
     if (idx !== -1 && idx < listaMeses.length - 1) {
+      const tipoAbierto = kpiActivo;
+      const colorAbierto = tipoAbierto ? document.querySelector(`.kpi[data-tipo="${tipoAbierto}"]`)?.dataset.color : null;
       _mesesSeccion[seccion] = listaMeses[idx + 1];
       window[varName] = _mesesSeccion[seccion];
       pintar();
       onCambio();
-      cerrarDetalleKPI();
+      if (tipoAbierto) { kpiActivo = null; mostrarDetalleKPI(tipoAbierto, colorAbierto || 'green'); }
+      else cerrarDetalleKPI();
     }
   };
 }
