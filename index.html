@@ -2645,6 +2645,21 @@ async function parsearPDFOrden(file){
     km = filas[idxKm+1].filter(w => w.x >= xKmLabel-5 && w.x < xDomicilioLabel-5).map(w=>w.text).join(' ').trim();
   }
 
+  // El teléfono está una fila más abajo que Kilómetros ("CUIT/CUIL: · Teléfono: · O./Compra:"),
+  // en la misma columna central — misma técnica que el Km, acotando por las etiquetas vecinas.
+  const idxTelefono = buscarFilaConPDF(filas, 'Teléfono:') ?? buscarFilaConPDF(filas, 'Telefono:');
+  let telefono = '';
+  if (idxTelefono !== null) {
+    const filaLabelsTel = filas[idxTelefono];
+    const labelTel = filaLabelsTel.find(w => w.text.includes('Telefono') || w.text.includes('Teléfono'));
+    const xTelefonoLabel = labelTel ? labelTel.x : null;
+    if (xTelefonoLabel !== null) {
+      const compraLabel = filaLabelsTel.find(w => w.text.includes('Compra'));
+      const xCompraLabel = compraLabel ? compraLabel.x : xTelefonoLabel + 300;
+      telefono = (filas[idxTelefono+1] || []).filter(w => w.x >= xTelefonoLabel-5 && w.x < xCompraLabel-5).map(w=>w.text).join(' ').trim();
+    }
+  }
+
   const idxFechas = buscarFilaConPDF(filas, 'Recibido', 'Finaliz');
   const filaFechasLabels = filas[idxFechas];
   const xRecibidoLabel = filaFechasLabels.find(w => w.text.includes('Recibido')).x;
@@ -2704,7 +2719,7 @@ async function parsearPDFOrden(file){
   return {
     orden, ordenCompleta,
     dominio: dominio.toUpperCase().replace(/\s+/g,''),
-    cliente, vehiculo, km,
+    cliente, vehiculo, km, telefono,
     fechaRecibido: fRecibido, fechaCompromiso: fCompromiso, fechaFinalizacion: fFinaliz,
     descripcionProblema: descripcion,
     repuestos, totalRepuestos, manoDeObra, totalManoDeObra, costoTotalCIVA,
@@ -2764,6 +2779,7 @@ document.getElementById('btnProcesarPDF').addEventListener('click', async () => 
     pdfLog('Leyendo PDF...');
     const rep = await parsearPDFOrden(file);
     pdfLog(`Detectado: OR ${rep.orden} — ${rep.cliente} — ${rep.vehiculo} (${rep.dominio})`);
+    pdfLog(`Km: ${rep.km || 'no encontrado'} · Teléfono: ${rep.telefono || 'no encontrado'}`);
     pdfLog(`Repuestos: ${rep.repuestos.length} ítem(s) por ${fmtMoney(rep.totalRepuestos)} · Mano de obra: ${rep.manoDeObra.length} ítem(s) por ${fmtMoney(rep.totalManoDeObra)}`);
     pdfLog(`Total C/IVA: ${fmtMoney(rep.costoTotalCIVA)}`);
 
@@ -2783,6 +2799,8 @@ document.getElementById('btnProcesarPDF').addEventListener('click', async () => 
       razonSocial: rep.cliente,
       vehiculo: rep.vehiculo,
       dominio: rep.dominio,
+      clienteKm: parseMiles(rep.km),
+      clienteTelefono: rep.telefono || '',
       total: rep.costoTotalCIVA,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
