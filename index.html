@@ -2973,8 +2973,8 @@ function cargarOrdenEnForm(orden, d){
   const estadoTxt = estaCerrada ? `cerrada el ${fmtISOaDDMMAA(d.fechaCierre)}` : 'todavía ABIERTA';
   const facturadoTxt = estaFacturada ? 'facturada/conciliada' : 'sin facturar';
   const cobroTxt = fc === 'SI' ? 'cobrada (sin fecha)' : (fc ? `cobrada en ${fc.slice(5,7)}/${fc.slice(2,4)}` : 'sin cobrar');
-  const telTxt = d.clienteTelefono ? d.clienteTelefono : '--';
-  const kmTxt = d.clienteKm ? Math.round(d.clienteKm).toLocaleString('es-AR') + ' km' : '--';
+  const telTxt = d.clienteTelefono ? d.clienteTelefono : 'SD';
+  const kmTxt = d.clienteKm ? Math.round(d.clienteKm).toLocaleString('es-AR') + ' km' : 'SD';
   $('buscarHint').innerHTML = `OR ${d.orden || orden} cargada — ${estadoTxt} · ${facturadoTxt} · ${cobroTxt}.<br>Tel: ${telTxt} · Km: ${kmTxt}<br><span style="color:var(--text-dim); font-size:12px;">Para tocar factura, modo de pago o cobro, usá la pestaña "💰 Cobranza".</span>`;
   $('btnBorrar').style.display = 'inline-block';
   ocultarResultados();
