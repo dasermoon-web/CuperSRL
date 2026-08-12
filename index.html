@@ -2815,7 +2815,6 @@ document.getElementById('btnProcesarPDF').addEventListener('click', async () => 
 
     pdfLog(`✔ OR ${rep.orden} guardada en Historial y en Facturación.`, 'ok');
     pdfLog('Recordá completar factura/cobro en "Ajuste puntual" cuando el cliente pague.', 'ok');
-    monthlyData = [];
     pdfArchivoSeleccionado = null;
     pdfInputEl.value = '';
     pdfDropText.innerHTML = '📄 Arrastrá el PDF acá, o <span style="color:var(--green); text-decoration:underline;">elegí un archivo</span>';
@@ -3120,7 +3119,6 @@ $('form').addEventListener('submit', async (e) => {
   try {
     await db.collection('ordenes').doc(orden).set(rec, { merge: true });
     await actualizarSelloModificacion();
-    monthlyData = []; // fuerza recarga del dashboard la próxima vez que se muestre
     clearForm();
     showStatus(`✔ OR ${orden} guardada correctamente. Formulario listo para la próxima búsqueda.`, true);
   } catch (err) {
@@ -3145,7 +3143,6 @@ $('btnBorrar').addEventListener('click', async () => {
     await actualizarSelloModificacion();
     showStatus(`✔ OR ${orden} borrada.`, true);
     clearForm();
-    monthlyData = [];
   } catch (err) {
     showStatus('Error al borrar: ' + err.message, false);
   }
@@ -3558,7 +3555,6 @@ $('cobForm').addEventListener('submit', async (e) => {
   try {
     await db.collection('ordenes').doc(cobOrdenActual).set(rec, { merge: true });
     await actualizarSelloModificacion();
-    monthlyData = [];
     const ordenGuardada = cobOrdenActual;
     limpiarCobForm();
     $('cobStatus').className = 'status ok';
