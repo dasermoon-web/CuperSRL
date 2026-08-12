@@ -517,6 +517,26 @@
 
       <div id="listaUsuarios"></div>
       <div class="status" id="listaUsuariosStatus" style="margin-top:8px;"></div>
+
+      <div class="panel" style="margin-top:20px;">
+        <div class="panel-head" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <h2>Movimientos</h2>
+          <button type="button" class="btn secondary" id="btnVerMovimientos">📋 Ver movimientos</button>
+        </div>
+        <div id="movimientosWrap" style="display:none; margin-top:14px; padding-top:14px; border-top:1px solid var(--line);">
+          <div id="movimientosLimpieza" style="display:none; background:rgba(240,185,79,.12); border:1px solid rgba(240,185,79,.4); color:#f0b94f; font-size:12.5px; padding:10px 14px; border-radius:8px; margin-bottom:14px;"></div>
+          <div style="display:flex; justify-content:flex-end; gap:8px; margin-bottom:10px;">
+            <button type="button" class="btn secondary" id="btnExportarMovimientos">📥 Exportar Excel</button>
+          </div>
+          <div style="max-height:420px; overflow-y:auto;">
+            <table>
+              <thead><tr><th>Fecha</th><th style="text-align:left;">Usuario</th><th style="text-align:left;">Acción</th><th>Orden</th></tr></thead>
+              <tbody id="movimientosBody"></tbody>
+            </table>
+          </div>
+          <div class="status" id="movimientosStatus" style="margin-top:8px;"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -2191,6 +2211,15 @@ function detenerTimerInactividad(){ clearTimeout(timerInactividad); }
 
 // Registro silencioso de accesos — no aparece en ningún lado de la app,
 // se consulta directo desde la consola de Firebase (colección "accesos").
+// Registro de modificaciones — visible en Usuarios (solo Admin), con exportación y limpieza.
+function registrarModificacion(accion, orden){
+  db.collection('modificaciones').add({
+    usuario: sesionActual ? sesionActual.usuario : '?',
+    accion, orden: orden || '',
+    fecha: firebase.firestore.FieldValue.serverTimestamp(),
+  }).catch(() => {});
+}
+
 function registrarAcceso(usuario){
   db.collection('accesos').add({
     usuario,
@@ -2501,6 +2530,80 @@ document.getElementById('btnCrearUsuario').addEventListener('click', async () =>
 });
 
 document.querySelector('.tab-btn[data-tab="usuarios"]').addEventListener('click', prepararPanelUsuarios);
+
+// ============== MOVIMIENTOS (modificaciones) — visible para cualquier Admin ==============
+let movimientosCache = [];
+document.getElementById('btnVerMovimientos').addEventListener('click', async () => {
+  const wrap = document.getElementById('movimientosWrap');
+  if (wrap.style.display === 'block') { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  const statusEl = document.getElementById('movimientosStatus');
+  statusEl.className = 'status'; statusEl.textContent = 'Cargando...';
+  try {
+    const snap = await db.collection('modificaciones').orderBy('fecha', 'desc').limit(500).get();
+    movimientosCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    document.getElementById('movimientosBody').innerHTML = movimientosCache.length
+      ? movimientosCache.map(m => {
+          const f = m.fecha && m.fecha.toDate ? fmtFechaDDMMAA(m.fecha.toDate()) + ' ' + m.fecha.toDate().toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit'}) : '—';
+          return `<tr><td>${f}</td><td style="text-align:left;">${m.usuario||''}</td><td style="text-align:left;">${m.accion||''}</td><td>${m.orden||''}</td></tr>`;
+        }).join('')
+      : '<tr><td colspan="4" style="text-align:center; color:var(--text-dim);">Sin movimientos registrados.</td></tr>';
+    statusEl.textContent = '';
+
+    // Si hay movimientos de más de 30 días, ofrecer limpiarlos (para ahorrar espacio/lecturas)
+    const haceUnMes = Date.now() - 30*24*60*60*1000;
+    const viejos = movimientosCache.filter(m => m.fecha && m.fecha.toDate && m.fecha.toDate().getTime() < haceUnMes);
+    const avisoEl = document.getElementById('movimientosLimpieza');
+    if (viejos.length) {
+      avisoEl.style.display = 'block';
+      avisoEl.innerHTML = `Hay ${viejos.length} movimiento(s) de hace más de un mes. <button type="button" class="btn secondary" id="btnLimpiarMovimientos" style="padding:6px 12px; font-size:11px; margin-left:6px;">Eliminarlos</button>`;
+      document.getElementById('btnLimpiarMovimientos').addEventListener('click', async () => {
+        if (!confirm(`¿Eliminar ${viejos.length} movimiento(s) de hace más de un mes? No se puede deshacer.`)) return;
+        avisoEl.textContent = 'Eliminando...';
+        try {
+          for (const v of viejos) { await db.collection('modificaciones').doc(v.id).delete(); }
+          avisoEl.style.display = 'none';
+          document.getElementById('btnVerMovimientos').click();
+          document.getElementById('btnVerMovimientos').click();
+        } catch (err) {
+          avisoEl.textContent = 'Error al limpiar: ' + err.message;
+        }
+      });
+    } else {
+      avisoEl.style.display = 'none';
+    }
+  } catch (err) {
+    statusEl.textContent = 'Error al cargar: ' + err.message;
+    statusEl.className = 'status err';
+  }
+});
+
+document.getElementById('btnExportarMovimientos').addEventListener('click', async () => {
+  if (!movimientosCache.length) return;
+  const btn = document.getElementById('btnExportarMovimientos');
+  const textoOriginal = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Generando...';
+  try {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Movimientos');
+    sheet.addRow(['Fecha', 'Usuario', 'Acción', 'Orden']).font = { bold: true };
+    movimientosCache.forEach(m => {
+      const f = m.fecha && m.fecha.toDate ? m.fecha.toDate() : null;
+      sheet.addRow([f ? f.toLocaleString('es-AR') : '', m.usuario||'', m.accion||'', m.orden||'']);
+    });
+    sheet.columns = [{width:18},{width:16},{width:18},{width:14}];
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'Movimientos_CuperSRL.xlsx';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert('Error generando el Excel: ' + err.message);
+  }
+  btn.disabled = false; btn.textContent = textoOriginal;
+});
 // ============== CARGAR DESDE PDF ==============
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
@@ -2825,6 +2928,7 @@ document.getElementById('btnProcesarPDF').addEventListener('click', async () => 
       });
     }
     await refOrden.set(datosOrden, { merge: true });
+    registrarModificacion('Carga por PDF', rep.orden);
     await actualizarSelloModificacion();
 
     pdfLog(`✔ OR ${rep.orden} guardada en Historial y en Facturación.`, 'ok');
@@ -3132,6 +3236,7 @@ $('form').addEventListener('submit', async (e) => {
   $('btnGuardar').disabled = true;
   try {
     await db.collection('ordenes').doc(orden).set(rec, { merge: true });
+    registrarModificacion('Ajuste de OR', orden);
     await actualizarSelloModificacion();
     clearForm();
     showStatus(`✔ OR ${orden} guardada correctamente. Formulario listo para la próxima búsqueda.`, true);
@@ -3154,6 +3259,7 @@ $('btnBorrar').addEventListener('click', async () => {
   $('btnBorrar').disabled = true;
   try {
     await db.collection('ordenes').doc(orden).delete();
+    registrarModificacion('Borrado de OR', orden);
     await actualizarSelloModificacion();
     showStatus(`✔ OR ${orden} borrada.`, true);
     clearForm();
@@ -3568,6 +3674,7 @@ $('cobForm').addEventListener('submit', async (e) => {
   $('cobBtnGuardar').disabled = true;
   try {
     await db.collection('ordenes').doc(cobOrdenActual).set(rec, { merge: true });
+    registrarModificacion('Cobranza', cobOrdenActual);
     await actualizarSelloModificacion();
     const ordenGuardada = cobOrdenActual;
     limpiarCobForm();
