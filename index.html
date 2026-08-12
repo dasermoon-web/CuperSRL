@@ -2186,6 +2186,16 @@ function detenerTimerInactividad(){ clearTimeout(timerInactividad); }
   document.addEventListener(ev, () => { if (sesionActual) reiniciarTimerInactividad(); });
 });
 
+// Registro silencioso de accesos — no aparece en ningún lado de la app,
+// se consulta directo desde la consola de Firebase (colección "accesos").
+function registrarAcceso(usuario){
+  db.collection('accesos').add({
+    usuario,
+    fecha: firebase.firestore.FieldValue.serverTimestamp(),
+    dispositivo: navigator.userAgent.slice(0, 120),
+  }).catch(() => {}); // si falla, no le rompe el login a nadie
+}
+
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const usuarioIngresado = document.getElementById('loginEmail').value.trim().toLowerCase();
@@ -2201,6 +2211,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     const doc = snap.docs[0];
     const d = doc.data();
     guardarSesion({ uid: doc.id, usuario: d.usuario, nombre: d.nombre || d.usuario, rol: d.rol || 'lectura' });
+    registrarAcceso(d.usuario);
     mostrarApp();
   } catch (err) {
     loginError.textContent = 'Error al conectar: ' + err.message;
