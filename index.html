@@ -1179,7 +1179,7 @@ function saveNewUser(){
 function editUser(id){
   const u=USERS.find(x=>x.id===id);if(!u)return;
   document.getElementById('m-title').textContent='Editar usuario';
-  document.getElementById('m-body').innerHTML=mInp('mn','Nombre','text',u.name,'')+mInp('mu','Usuario (sin @)','text',u.user,'')+mInp('mp','Nueva contrasena (vacio = sin cambio)','password','','')+
+  document.getElementById('m-body').innerHTML=mInp('mn','Nombre','text',u.name,'')+mInp('mp','Nueva contrasena (vacio = sin cambio)','password','','')+
     `<label class="form-lbl" style="margin-top:10px;display:block">Rol</label><select id="mr" class="form-inp" style="cursor:pointer"><option value="viewer"${u.role==='viewer'?' selected':''}>Solo Lectura</option><option value="editor"${u.role==='editor'?' selected':''}>Editor</option><option value="gerencia"${u.role==='gerencia'?' selected':''}>Gerencia</option><option value="admin"${u.role==='admin'?' selected':''}>Admin</option></select>`;
   document.getElementById('m-foot').innerHTML=`<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveEditUser(${id})">Guardar</button>`;
   document.getElementById('modal').style.display='flex';
@@ -1187,7 +1187,6 @@ function editUser(id){
 function saveEditUser(id){
   const u=USERS.find(x=>x.id===id);if(!u)return;
   u.name=document.getElementById('mn').value.trim()||u.name;
-  const nu=document.getElementById('mu').value.trim();if(nu)u.user=nu;
   const np=document.getElementById('mp').value;if(np)u.pass=np;
   u.role=document.getElementById('mr').value;
   saveUsers();renderUsers();closeModal();toast('Usuario actualizado','ok');
