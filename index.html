@@ -3380,9 +3380,11 @@ function renderCobPagosLista(){
 
 $('cobBtnAgregarPago').addEventListener('click', () => {
   const mes = $('cobNuevoPagoMes').value; // ya viene como 'YYYY-MM' del <input type="month">
-  const monto = parseMiles($('cobNuevoPagoMonto').value);
+  const montoTexto = $('cobNuevoPagoMonto').value.trim();
+  const monto = parseMiles(montoTexto);
   if (!mes) { alert('Elegí el mes de ese pago.'); return; }
-  if (!monto || monto <= 0) { alert('Cargá el monto de ese pago.'); return; }
+  if (montoTexto === '') { alert('Cargá el monto de ese pago (podés poner 0 si es una OR sin cargo).'); return; }
+  if (monto < 0) { alert('El monto no puede ser negativo.'); return; }
   cobPagosActuales.push({ fecha: mes, monto });
   $('cobNuevoPagoMes').value = '';
   $('cobNuevoPagoMonto').value = '';
