@@ -965,9 +965,21 @@ function procesarDatos(docs){
     }
 
     // --- Facturas cobradas por mes (para la tendencia de "Fac. Cobradas") ---
-    if (rec.fechaCobro && rec.fechaCobro !== 'SI' && rec.facNro && rec.facNro !== '' && rec.total) {
-      const mesCobro = rec.fechaCobro.slice(0,7);
-      cobradasMap[mesCobro] = (cobradasMap[mesCobro] || 0) + (rec.total || 0);
+    // Se suma cada pago individual en su propio mes (no el total de la factura entera),
+    // así una OR pagada en cuotas en distintos meses queda bien repartida por mes real de cobro.
+    if (rec.facNro && rec.facNro !== '') {
+      if (Array.isArray(rec.pagos) && rec.pagos.length) {
+        rec.pagos.forEach(p => {
+          if (p.fecha && /^\d{4}-\d{2}/.test(p.fecha)) {
+            const mesCobro = p.fecha.slice(0,7);
+            cobradasMap[mesCobro] = (cobradasMap[mesCobro] || 0) + (p.monto || 0);
+          }
+        });
+      } else if (rec.fechaCobro && rec.fechaCobro !== 'SI') {
+        // dato viejo sin historial: usamos lo que realmente se cobró, no el total de la factura
+        const mesCobro = rec.fechaCobro.slice(0,7);
+        cobradasMap[mesCobro] = (cobradasMap[mesCobro] || 0) + getMontoCobrado(rec);
+      }
     }
 
     // --- Abiertas / pendientes de facturar (solo tiene sentido evaluarlo una vez cerrada) ---
@@ -1206,7 +1218,20 @@ function renderKPIs(){
   const datosMes = monthlyData.find(m => m.Mes === mesRef) || { Mes: mesRef, Facturado: 0, Conciliado: 0 };
   const totalFacturasImpagas = facturasImpagas.reduce((a,r)=>a + montoAdeudado(r), 0);
 
-  cobradasEsteMes = todosLosDocs.filter(rec => rec.fechaCobro && rec.fechaCobro !== 'SI' && rec.fechaCobro.slice(0,7) === mesRef && rec.total && rec.facNro && rec.facNro !== '');
+  // Cada pago individual que cayó en el mes seleccionado, de OR con N° de factura real.
+  // Usamos el historial de pagos para que un pago parcial no arrastre el total entero de la factura.
+  cobradasEsteMes = [];
+  todosLosDocs.forEach(rec => {
+    if (!rec.facNro || rec.facNro === '') return;
+    if (Array.isArray(rec.pagos) && rec.pagos.length) {
+      rec.pagos.forEach(p => {
+        if (p.fecha === mesRef) cobradasEsteMes.push({ ...rec, total: p.monto, totalFacturado: rec.total, fechaCobro: p.fecha + '-01' });
+      });
+    } else if (rec.fechaCobro && rec.fechaCobro !== 'SI' && rec.fechaCobro.slice(0,7) === mesRef) {
+      // dato viejo sin historial: usamos lo que realmente se cobró, no el total de la factura
+      cobradasEsteMes.push({ ...rec, total: getMontoCobrado(rec), totalFacturado: rec.total });
+    }
+  });
   const totalCobradasEsteMes = cobradasEsteMes.reduce((a,r)=>a + (r.total||0), 0);
 
   // --- Comparación vs. mes anterior + tendencia últimos 6 meses ---
