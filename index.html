@@ -696,6 +696,13 @@
 
       <div id="detalleKpiCaption" style="display:none; background:var(--panel-2); border:1px solid var(--line); border-radius:6px; padding:10px 14px; margin-bottom:14px; font-size:12px; color:var(--text-dim); line-height:1.6;"></div>
 
+      <div id="filtroSinFacturarWrap" style="display:none; margin-bottom:12px;">
+        <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;">
+          <input type="checkbox" id="filtroSoloSinFacturar" style="width:auto;">
+          Mostrar solo las que todavía no tienen factura ni conciliación
+        </label>
+      </div>
+
       <div id="detalleKpiTablaWrap" style="max-height:420px; overflow-y:auto;">
         <table>
           <thead id="detalleKpiThead"><tr><th>Orden</th><th style="text-align:left;">Cliente</th><th style="text-align:left;">Vehículo</th><th>Fecha</th><th>Importe</th></tr></thead>
@@ -1472,6 +1479,20 @@ function cerrarDetalleKPI(){
 }
 document.getElementById('detalleKpiCerrar').addEventListener('click', cerrarDetalleKPI);
 
+document.getElementById('filtroSoloSinFacturar').addEventListener('change', () => {
+  if (kpiActivo !== 'pendFacturacion') return;
+  const base = pendientesCobroMarcados.map(o => ({ ...o, total: getSaldoPendiente(o), totalFacturado: o.total }));
+  const filtrada = document.getElementById('filtroSoloSinFacturar').checked
+    ? base.filter(o => categoria(o) === 'SinClasificar')
+    : base;
+  document.getElementById('detalleKpiTitulo').textContent = `OR sin cancelar (${filtrada.length})`;
+  const fechaColBase = (o) => (o.fechaCierre && o.fechaCierre !== 'N') ? o.fechaCierre : (o.fechaIng || '');
+  detalleSortField = null; detalleSortDir = 'asc';
+  detalleCtx = { tipo: 'pendFacturacion', lista: [...filtrada], fechaCol: fechaColBase };
+  renderDetalleTabla();
+  exportData = { titulo: 'OR sin cancelar', lista: filtrada, fechaCol: fechaColBase };
+});
+
 function mostrarDetalleKPI(tipo, color){
   if (kpiActivo === tipo) { cerrarDetalleKPI(); return; }
   kpiActivo = tipo;
@@ -1517,7 +1538,10 @@ function mostrarDetalleKPI(tipo, color){
     titulo = `Conciliado — ${monthLabel(mesRef)}`;
     fechaCol = (o) => o.fechaFact;
   } else if (tipo === 'pendFacturacion') {
-    lista = pendientesCobroMarcados.map(o => ({ ...o, total: getSaldoPendiente(o), totalFacturado: o.total }));
+    const base = pendientesCobroMarcados.map(o => ({ ...o, total: getSaldoPendiente(o), totalFacturado: o.total }));
+    lista = (document.getElementById('filtroSoloSinFacturar').checked)
+      ? base.filter(o => categoria(o) === 'SinClasificar')
+      : base;
     titulo = 'OR sin cancelar';
   } else if (tipo === 'facturasImpagas') {
     lista = facturasImpagas.map(o => ({ ...o, total: montoAdeudado(o), totalFacturado: o.total }));
@@ -1543,6 +1567,14 @@ function mostrarDetalleKPI(tipo, color){
     caption.style.display = 'block';
   } else {
     caption.style.display = 'none';
+  }
+
+  const filtroWrap = document.getElementById('filtroSinFacturarWrap');
+  if (tipo === 'pendFacturacion') {
+    filtroWrap.style.display = 'block';
+  } else {
+    filtroWrap.style.display = 'none';
+    document.getElementById('filtroSoloSinFacturar').checked = false;
   }
 
   detalleSortField = null;
