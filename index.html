@@ -699,7 +699,7 @@
       <div id="filtroSinFacturarWrap" style="display:none; margin-bottom:12px;">
         <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;">
           <input type="checkbox" id="filtroSoloSinFacturar" style="width:auto;">
-          Mostrar solo las que todavía no tienen factura ni conciliación
+          OR pendiente de facturación
         </label>
       </div>
 
@@ -947,6 +947,13 @@ function categoria(rec){
   if (rec.facNro && rec.facNro !== '') return 'Facturado';
   if (rec.facSN && rec.facSN !== '') return 'Conciliado';
   return 'SinClasificar';
+}
+
+// OR sin factura ni conciliación, que ADEMÁS tienen saldo pendiente real (calculado, no un tilde manual).
+function calcularPendientesDeFacturacion(){
+  return todosLosDocs
+    .filter(o => categoria(o) === 'SinClasificar' && getSaldoPendiente(o) > 0)
+    .map(o => ({ ...o, total: getSaldoPendiente(o), totalFacturado: o.total }));
 }
 
 function procesarDatos(docs){
@@ -1483,7 +1490,7 @@ document.getElementById('filtroSoloSinFacturar').addEventListener('change', () =
   if (kpiActivo !== 'pendFacturacion') return;
   const base = pendientesCobroMarcados.map(o => ({ ...o, total: getSaldoPendiente(o), totalFacturado: o.total }));
   const filtrada = document.getElementById('filtroSoloSinFacturar').checked
-    ? base.filter(o => categoria(o) === 'SinClasificar')
+    ? calcularPendientesDeFacturacion()
     : base;
   document.getElementById('detalleKpiTitulo').textContent = `OR sin cancelar (${filtrada.length})`;
   const fechaColBase = (o) => (o.fechaCierre && o.fechaCierre !== 'N') ? o.fechaCierre : (o.fechaIng || '');
@@ -1540,7 +1547,7 @@ function mostrarDetalleKPI(tipo, color){
   } else if (tipo === 'pendFacturacion') {
     const base = pendientesCobroMarcados.map(o => ({ ...o, total: getSaldoPendiente(o), totalFacturado: o.total }));
     lista = (document.getElementById('filtroSoloSinFacturar').checked)
-      ? base.filter(o => categoria(o) === 'SinClasificar')
+      ? calcularPendientesDeFacturacion()
       : base;
     titulo = 'OR sin cancelar';
   } else if (tipo === 'facturasImpagas') {
