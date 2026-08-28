@@ -3474,6 +3474,17 @@ function actualizarSaldoCobForm(){
 }
 
 function cargarOrdenEnCobForm(orden, d){
+  const estaCerrada = d.fechaCierre && d.fechaCierre !== 'N';
+  if (!estaCerrada) {
+    $('cobBuscarHint').innerHTML = `⚠ La OR ${orden} todavía está <strong>abierta</strong> (sin fecha de cierre) — no se puede cargar factura ni cobro hasta que se cierre en "Ajuste de OR".`;
+    $('cobFormPanel').style.display = 'none';
+    $('cobResultadosMultiples').innerHTML = '';
+    $('cobResultadosOrden').style.display = 'none';
+    $('cobResultadosOrden').innerHTML = '';
+    $('cobResultadosFacturaLive').style.display = 'none';
+    $('cobResultadosFacturaLive').innerHTML = '';
+    return;
+  }
   cobOrdenActual = orden;
   cobOrdenTotal = d.total || 0;
   setCobFechaFact(d.fechaFact || '');
