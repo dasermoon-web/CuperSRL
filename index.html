@@ -627,6 +627,7 @@
               <option value="Cheque">Cheque</option>
               <option value="Derivado">Derivado</option>
               <option value="SC">SC</option>
+              <option value="Reclamo">Reclamo</option>
               <option value="__otro__">Otro (escribir)</option>
             </select>
           </div>
@@ -3028,7 +3029,7 @@ function clearForm(){
 $('btnNuevo').addEventListener('click', clearForm);
 
 // ============== MODO DE PAGO (desplegable + "otro") — pestaña Cobranza ==============
-const OPCIONES_CONDICION = ['Contado','ContadoSF','Cta. Cte.','T. Credito','Transferencia','Cheque','Derivado','SC'];
+const OPCIONES_CONDICION = ['Contado','ContadoSF','Cta. Cte.','T. Credito','T. Debito','Transferencia','Cheque','Derivado','SC','Reclamo'];
 function setCobCondicionUI(valor){
   const select = $('cobCondicionSelect');
   const input = $('cobCondicion');
@@ -3059,6 +3060,9 @@ $('cobCondicionSelect').addEventListener('change', () => {
   // Autocompletar "Conciliación (sin factura)" con "SF" cuando el modo de pago es ContadoSF
   if (v === 'ContadoSF' && !$('cobFacSN').value.trim()) {
     $('cobFacSN').value = 'SF';
+  }
+  if (v === 'Reclamo' && !$('cobFacSN').value.trim()) {
+    $('cobFacSN').value = 'Reclamo';
   }
 });
 
@@ -3732,22 +3736,28 @@ $('cobForm').addEventListener('submit', async (e) => {
   if (bloquearSiSoloLectura()) return;
   if (!cobOrdenActual) return;
 
-  const montoCobrado = Math.min(totalPagos(), cobOrdenTotal);
+  const condicionTrim = $('cobCondicion').value.trim();
+  const esReclamo = condicionTrim === 'Reclamo';
+  // Un reclamo no es un cobro real: el importe de la OR pasa a negativo (es plata que se
+  // le devuelve/descuenta al cliente), no lleva número de factura, y queda conciliada sin saldo.
+  const totalEfectivo = esReclamo ? -Math.abs(cobOrdenTotal) : cobOrdenTotal;
+  const facNroTrim = esReclamo ? '' : $('cobFacNro').value.trim().toUpperCase();
+  const montoCobrado = esReclamo ? 0 : Math.min(totalPagos(), totalEfectivo);
   const ultimoMes = ultimoMesPago();
-  const facNroTrim = $('cobFacNro').value.trim().toUpperCase();
 
   const rec = {
     fechaFact: $('cobFechaFact').value || '',
-    condicion: $('cobCondicion').value.trim(),
+    condicion: condicionTrim,
     facNro: facNroTrim,
     facSN: $('cobFacSN').value.trim(),
     fechaCobro: ultimoMes ? ultimoMes + '-01' : '',
     pagos: cobPagosActuales,
     pendienteCobro: $('cobPendienteCobro').checked,
     montoCobrado: montoCobrado,
-    facturaImpaga: facNroTrim !== '' && montoCobrado < cobOrdenTotal,
+    facturaImpaga: facNroTrim !== '' && montoCobrado < totalEfectivo,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
   };
+  if (esReclamo) rec.total = totalEfectivo;
 
   $('cobBtnGuardar').disabled = true;
   try {
