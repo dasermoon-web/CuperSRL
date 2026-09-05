@@ -951,10 +951,11 @@ function categoria(rec){
   return 'SinClasificar';
 }
 
-// OR sin factura ni conciliación, que ADEMÁS tienen saldo pendiente real (calculado, no un tilde manual).
+// OR sin número de factura real (esté conciliada o no), que ADEMÁS tienen saldo
+// pendiente real (calculado, no un tilde manual).
 function calcularPendientesDeFacturacion(){
   return todosLosDocs
-    .filter(o => categoria(o) === 'SinClasificar' && getSaldoPendiente(o) > 0)
+    .filter(o => (!o.facNro || o.facNro === '') && getSaldoPendiente(o) > 0)
     .map(o => ({ ...o, total: getSaldoPendiente(o), totalFacturado: o.total }));
 }
 
